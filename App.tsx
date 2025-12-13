@@ -1,3 +1,4 @@
+
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { Info, StopCircle, Clock, Zap, Sparkles, Filter, Check, PlayCircle, X, FileJson, AlertOctagon, RotateCw, HardDrive, TableProperties, FileCode, FileSpreadsheet, Loader2 } from 'lucide-react';
 import SearchBar from './components/SearchBar';
@@ -12,15 +13,19 @@ import CacheModal from './components/modals/CacheModal';
 import { supabase } from './services/supabase';
 import { extractDataFromContext, enrichWithGemini } from './services/gemini';
 import { searchWithSerper } from './services/serper';
-import { cacheService, projectService, blacklistService, globalIndexService, fileSystemService } from './services/storage';
+import { cacheService, projectService, blacklistService, globalIndexService } from './services/storage';
 import { BusinessData, ScraperState, ScraperProvider, CountryCode, SavedSession, SerperStrategy, Project, ColumnLabelMap } from './types';
 import { getInteractiveHTMLContent, createExcelWorkbook, exportToExcel } from './utils/exportUtils';
-import { write } from 'xlsx';
+
+// Hooks
+import { useProjects } from './hooks/useProjects';
+import { useAutoSave } from './hooks/useAutoSave';
+import { useQuota } from './hooks/useQuota';
+
 
 const SESSION_KEY = 'mapscraper_active_session_v1';
 const BATCH_CONCURRENCY = 3; // Nombre de requêtes en parallèle (Mode Turbo)
 const BATCH_DELAY_MS = 1000; // Délai entre chaque lot pour éviter le rate-limit
-const AUTO_SAVE_INTERVAL_MS = 5 * 60 * 1000; // 5 Minutes
 
 // COÛTS SERPER
 const COSTS = {
@@ -89,26 +94,18 @@ const App: React.FC = () => {
   const [session, setSession] = useState<any>(null);
   const [authLoading, setAuthLoading] = useState(true);
 
-  // Option Privacy / Proxy Local (TRUE par défaut, caché dans l'UI)
-  const [isIncognito, setIsIncognito] = useState(true);
-
   // Column Customization
   const [columnLabels, setColumnLabels] = useState<ColumnLabelMap>(DEFAULT_LABELS);
   const [showColumnModal, setShowColumnModal] = useState(false);
+  
+  // Custom Hooks
+  const { quotaLimit, quotaUsed, updateQuotaUsed, handleUpdateQuotaLimit, handleResetQuota } = useQuota(5000);
+  const { projects, activeProjectId, setActiveProjectId, loadProjects, handleCreateProject, handleDeleteProject, handleSelectProject } = useProjects();
+  const { dirHandle, setDirHandle, hasStoredHandle, lastAutoSave, performAutoSave, restoreFolderConnection, handleConnectLocalFolder } = useAutoSave(activeProjectId, projects, columnLabels);
 
-  // Quota Management
-  const [quotaLimit, setQuotaLimit] = useState(5000);
-  const [quotaUsed, setQuotaUsed] = useState(0);
 
   // Project Management
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
   const [showProjectModal, setShowProjectModal] = useState(false);
-
-  // Auto Save / File System Access API
-  const [dirHandle, setDirHandle] = useState<any>(null); // FileSystemDirectoryHandle
-  const [hasStoredHandle, setHasStoredHandle] = useState(false); // If true, we can try to restore for the CURRENT project
-  const [lastAutoSave, setLastAutoSave] = useState<number | null>(null);
 
   const [historyCount, setHistoryCount] = useState(0);
   const [activeSession, setActiveSession] = useState<SavedSession | null>(null);
@@ -130,16 +127,12 @@ const App: React.FC = () => {
     // 1. Initial Data Load
     checkActiveSession();
     refreshHistoryCount();
-    loadProjects();
     
-    const savedLimit = localStorage.getItem('mapscraper_quota_limit');
-    const savedUsed = localStorage.getItem('mapscraper_quota_used');
-    if(savedLimit) setQuotaLimit(Number(savedLimit));
-    if(savedUsed) setQuotaUsed(Number(savedUsed));
-
     const savedLabels = localStorage.getItem('mapscraper_column_labels');
     if (savedLabels) {
-        setColumnLabels(JSON.parse(savedLabels));
+        try {
+            setColumnLabels(JSON.parse(savedLabels));
+        } catch(e) { console.error("Failed to parse column labels from localStorage", e); }
     }
 
     // 2. Auth Check
@@ -161,196 +154,14 @@ const App: React.FC = () => {
       await supabase.auth.signOut();
   };
 
-  // --- PROJECT SWITCH & HANDLE CHECK ---
-  useEffect(() => {
-    const checkProjectHandle = async () => {
-        setDirHandle(null);
-        setHasStoredHandle(false);
-        setLastAutoSave(null);
-
-        if (activeProjectId) {
-            const handle = await fileSystemService.getHandle(activeProjectId);
-            if (handle) {
-                setHasStoredHandle(true);
-            }
-        }
-    };
-    checkProjectHandle();
-  }, [activeProjectId]);
-
-  // --- AUTO SAVE FUNCTION (CENTRALIZED) ---
-  const performAutoSave = async (handleToUse?: any) => {
-    const handle = handleToUse || dirHandle;
-    if (!handle || !activeProjectId) return;
-
-    try {
-        const project = projects.find(p => p.id === activeProjectId);
-        if (!project) return;
-        
-        const data = await projectService.getProjectContent(activeProjectId);
-        if (data.length === 0) return;
-
-        const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-        const baseName = `AUTOSAVE_${project.name.replace(/\s+/g, '_')}`;
-
-        console.log("Exécution sauvegarde auto...");
-
-        // 1. Save JSON
-        const jsonHandle = await handle.getFileHandle(`${baseName}_DATA.json`, { create: true });
-        const writableJson = await jsonHandle.createWritable();
-        await writableJson.write(JSON.stringify(data, null, 2));
-        await writableJson.close();
-
-        // 2. Save Excel
-        const wb = createExcelWorkbook(data, columnLabels);
-        const excelBuffer = write(wb, { bookType: 'xlsx', type: 'array' });
-        
-        const xlsxHandle = await handle.getFileHandle(`${baseName}.xlsx`, { create: true });
-        const writableXlsx = await xlsxHandle.createWritable();
-        await writableXlsx.write(excelBuffer);
-        await writableXlsx.close();
-
-        // 3. Save HTML (New)
-        const htmlContent = getInteractiveHTMLContent(data, project.name, columnLabels);
-        const htmlHandle = await handle.getFileHandle(`${baseName}_APP.html`, { create: true });
-        const writableHtml = await htmlHandle.createWritable();
-        await writableHtml.write(htmlContent);
-        await writableHtml.close();
-
-        setLastAutoSave(Date.now());
-        console.log("Sauvegarde auto OK");
-        
-    } catch (err) {
-        console.error("Erreur lors de la sauvegarde auto:", err);
-        // Si permission révoquée, on clean
-        if (dirHandle) setDirHandle(null);
-    }
-  };
-
-  // --- AUTO SAVE EFFECT (INTERVAL) ---
-  useEffect(() => {
-    if (!dirHandle || !activeProjectId) return;
-
-    const intervalId = setInterval(() => {
-        performAutoSave(dirHandle);
-    }, AUTO_SAVE_INTERVAL_MS);
-
-    return () => clearInterval(intervalId);
-  }, [dirHandle, activeProjectId, projects, columnLabels]); // columnLabels needed for HTML generation
-
-  const restoreFolderConnection = async () => {
-    if (!activeProjectId) return;
-    try {
-        // Retrieve project-specific handle
-        const handle = await fileSystemService.getHandle(activeProjectId);
-        if (!handle) {
-            alert("Aucun dossier mémorisé pour ce projet.");
-            setHasStoredHandle(false);
-            return;
-        }
-
-        // Le navigateur va demander une confirmation ici (User Activation required)
-        const perm = await handle.requestPermission({ mode: 'readwrite' });
-        
-        if (perm === 'granted') {
-            setDirHandle(handle);
-            // Sauvegarde immédiate pour confirmer que ça marche
-            performAutoSave(handle);
-        } else {
-            alert("Permission refusée. Veuillez reconnecter manuellement.");
-        }
-    } catch (e) {
-        console.error("Erreur restauration dossier:", e);
-        alert("Impossible de restaurer le dossier. Veuillez reconnecter.");
-    }
-  };
-
-  const handleConnectLocalFolder = async () => {
-    if (!activeProjectId) {
-        alert("Veuillez sélectionner un dossier (projet) d'abord.");
-        return;
-    }
-    try {
-        if ('showDirectoryPicker' in window) {
-            // @ts-ignore
-            const handle = await window.showDirectoryPicker();
-            // Demande permission lecture/écriture si nécessaire
-            if ((await handle.queryPermission({ mode: 'readwrite' })) !== 'granted') {
-                if ((await handle.requestPermission({ mode: 'readwrite' })) !== 'granted') {
-                    alert("Permission refusée. La sauvegarde auto ne fonctionnera pas.");
-                    return;
-                }
-            }
-            
-            // 1. Update State
-            setDirHandle(handle);
-            
-            // 2. Persist Handle for THIS PROJECT
-            await fileSystemService.saveHandle(activeProjectId, handle);
-            setHasStoredHandle(true);
-
-            // 3. Immediate Save
-            performAutoSave(handle);
-
-        } else {
-            alert("Votre navigateur ne supporte pas l'accès aux dossiers locaux. Utilisez Chrome, Edge ou Opera sur ordinateur.");
-        }
-    } catch (err: any) {
-        console.error("Annulé ou erreur:", err);
-        if (err.message && err.message.includes('Cross origin sub frames')) {
-            alert("⚠️ Fonctionnalité bloquée par l'aperçu\n\nSolution : Ouvrez l'application en plein écran (Nouvel onglet) ou installez-la.");
-        }
-    }
-  };
-
   const saveColumnLabels = (newLabels: ColumnLabelMap) => {
       setColumnLabels(newLabels);
       localStorage.setItem('mapscraper_column_labels', JSON.stringify(newLabels));
   };
-
-  const updateQuotaUsed = (cost: number) => {
-      const newValue = quotaUsed + cost;
-      setQuotaUsed(newValue);
-      localStorage.setItem('mapscraper_quota_used', String(newValue));
-  };
-
-  const handleUpdateQuotaLimit = (limit: number) => {
-      setQuotaLimit(limit);
-      localStorage.setItem('mapscraper_quota_limit', String(limit));
-  };
-
-  const handleResetQuota = () => {
-      setQuotaUsed(0);
-      localStorage.setItem('mapscraper_quota_used', '0');
-  }
-
-  const loadProjects = async () => {
-      const all = await projectService.getAllProjects();
-      setProjects(all);
-  };
-
-  const handleCreateProject = async (name: string, autoExportFormats?: ('xlsx' | 'json' | 'html')[]) => {
-      const newProj = await projectService.createProject(name, autoExportFormats);
-      await loadProjects();
-      setActiveProjectId(newProj.id); 
-  };
-
-  const handleDeleteProject = async (id: string, e: React.MouseEvent) => {
-      e.stopPropagation();
-      if(window.confirm("Supprimer ce dossier et toutes ses données ?")) {
-          await projectService.deleteProject(id);
-          await loadProjects();
-          if(activeProjectId === id) {
-              setActiveProjectId(null);
-              setState(prev => ({ ...prev, results: [] }));
-          }
-      }
-  };
-
-  const handleSelectProject = async (id: string | null) => {
-      setActiveProjectId(id);
-      if (id) {
-          const content = await projectService.getProjectContent(id);
+  
+  const selectProjectAndLoadContent = async (id: string | null) => {
+      const content = await handleSelectProject(id);
+      if (content) {
           setState(prev => ({
               ...prev,
               results: content,
@@ -358,8 +169,7 @@ const App: React.FC = () => {
               isLoading: false,
               progress: { current: 0, total: 0 }
           }));
-      } else {
-          // Si on désélectionne, on vide la vue actuelle
+      } else if (id === null) {
           setState(prev => ({ ...prev, results: [] }));
       }
   };
@@ -374,7 +184,6 @@ const App: React.FC = () => {
   };
 
   // --- EXPORT LOGIC ---
-
   const handleExportProject = async (e: React.MouseEvent, project: Project, type: 'xlsx' | 'json' | 'html') => {
     e.stopPropagation(); 
     try {
@@ -408,9 +217,9 @@ const App: React.FC = () => {
     try {
       const saved = localStorage.getItem(SESSION_KEY);
       if (saved) {
-        const session: SavedSession = JSON.parse(saved);
-        if (session.query && session.results.length < session.query.split('\n').filter(l => l.trim()).length) {
-            setActiveSession(session);
+        const sessionData: SavedSession = JSON.parse(saved);
+        if (sessionData.query && sessionData.results.length < sessionData.query.split('\n').filter(l => l.trim()).length) {
+            setActiveSession(sessionData);
         } else {
             localStorage.removeItem(SESSION_KEY);
         }
@@ -450,14 +259,14 @@ const App: React.FC = () => {
 
   const saveSession = (query: string, currentIndex: number, results: BusinessData[], config: SavedSession['config']) => {
       try {
-          const session: SavedSession = {
+          const sessionData: SavedSession = {
               query,
               currentIndex,
               results,
               timestamp: Date.now(),
               config
           };
-          localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+          localStorage.setItem(SESSION_KEY, JSON.stringify(sessionData));
       } catch (e) {
           console.warn("Failed to save session", e);
       }
@@ -572,12 +381,7 @@ const App: React.FC = () => {
     setActiveSession(null);
     setExportFilters({ excludeClosed: false, excludeNoPhone: false, excludeDuplicates: false, onlyWithEmail: false });
     
-    // Determine cost per query
     const costPerQuery = COSTS[strategy] || 3;
-
-    if (!activeProjectId && !isBatch) {
-        // Single search sans projet : Reset visuel sauf si cache
-    }
 
     if (!isBatch) {
       // --- SINGLE MODE ---
@@ -597,7 +401,7 @@ const App: React.FC = () => {
           if (activeProjectId) {
               await projectService.addResultsToProject(activeProjectId, [newResult]);
               await loadProjects(); 
-              performAutoSave(); // IMMEDIATE SAVE
+              await performAutoSave();
           }
           return;
       }
@@ -607,7 +411,6 @@ const App: React.FC = () => {
       try {
         if (stopRef.current) return;
         
-        // Deduct Quota for single search
         updateQuotaUsed(costPerQuery);
 
         const { businesses, rawText } = await processSingleQuery(query, provider, serperKey, country, strategy);
@@ -616,12 +419,10 @@ const App: React.FC = () => {
         if (businesses.length > 0) {
             let item = businesses[0];
             
-            // Checks Globaux (Blacklist / Doublon)
             const blCheck = blacklistService.isBlacklisted(item);
             if (blCheck.isBlacklisted) {
                 item = { ...item, status: `Ignoré: ${blCheck.reason}`, email: undefined, phone: undefined };
             } else if (activeProjectId) {
-                // Check dupliqué uniquement si on sauvegarde dans un projet
                 const dupCheck = await globalIndexService.checkDuplicate(item);
                 if (dupCheck.isDuplicate && dupCheck.projectId !== activeProjectId) {
                      const projName = await projectService.getProjectName(dupCheck.projectId || '');
@@ -632,13 +433,10 @@ const App: React.FC = () => {
             await cacheService.set(query, item);
             refreshHistoryCount();
             
-            if (activeProjectId) {
-                // On n'ajoute pas les items blacklistés pour ne pas polluer le projet
-                if (!blCheck.isBlacklisted) {
-                    await projectService.addResultsToProject(activeProjectId, [item]);
-                    await loadProjects();
-                    performAutoSave(); // IMMEDIATE SAVE
-                }
+            if (activeProjectId && !blCheck.isBlacklisted) {
+                await projectService.addResultsToProject(activeProjectId, [item]);
+                await loadProjects();
+                await performAutoSave();
             }
             
             setState(prev => ({
@@ -674,23 +472,19 @@ const App: React.FC = () => {
         rawText: null 
       }));
 
-      // Boucle par LOTS (Chunks)
       for (let i = startIndex; i < lines.length; i += BATCH_CONCURRENCY) {
         if (stopRef.current) break;
         
         const chunk = lines.slice(i, i + BATCH_CONCURRENCY);
         setEstimatedTimeLeft(formatTimeLeft(lines.length - i));
         
-        // Traitement parallèle du lot
         const promises = chunk.map(async (line) => {
-            // Check Cache first
             const cached = await cacheService.get(line);
             if (cached) {
                 return { success: true, data: { ...cached, searchedTerm: line }, fromCache: true };
             }
 
             try {
-                // API Call
                 const { businesses } = await processSingleQuery(line, provider, serperKey, country, strategy);
                 return { success: true, data: businesses[0], fromCache: false };
             } catch (e: any) {
@@ -702,16 +496,13 @@ const App: React.FC = () => {
         });
 
         const batchResults = await Promise.all(promises);
-
         if (stopRef.current) break;
         
-        // Calculate costs for this batch
         const realApiCallCount = batchResults.filter(r => !r.fromCache && r.success).length;
         if (realApiCallCount > 0) {
             updateQuotaUsed(realApiCallCount * costPerQuery);
         }
 
-        // Post-traitement du lot (Filtrage Blacklist/Doublons)
         const validResultsToAdd: BusinessData[] = [];
         const resultsToDisplay: BusinessData[] = [];
         
@@ -720,14 +511,12 @@ const App: React.FC = () => {
                 let item = res.data;
                 let saveToProject = true;
 
-                // 1. Check Blacklist
                 const blCheck = blacklistService.isBlacklisted(item);
                 if (blCheck.isBlacklisted) {
                     item = { ...item, status: `Ignoré (Blacklist)`, email: undefined, phone: undefined };
                     saveToProject = false;
                 }
 
-                // 2. Check Global Duplicate (Uniquement si pas déjà blacklisté)
                 if (saveToProject && activeProjectId) {
                      const dupCheck = await globalIndexService.checkDuplicate(item);
                      if (dupCheck.isDuplicate && dupCheck.projectId !== activeProjectId) {
@@ -752,13 +541,11 @@ const App: React.FC = () => {
         if (validResultsToAdd.length > 0) {
              await refreshHistoryCount();
              
-             // Save to project
              if (activeProjectId) {
                  await projectService.addResultsToProject(activeProjectId, validResultsToAdd);
              }
         }
         
-        // Update UI State en une seule fois pour le lot
         setState(prev => {
             if (stopRef.current) return prev;
             const newResults = mergeNewResults(prev.results, resultsToDisplay);
@@ -773,15 +560,13 @@ const App: React.FC = () => {
              
         if (activeProjectId) await loadProjects();
 
-        // Petit délai pour respecter les APIs si ce n'est pas le dernier lot
         if (i + BATCH_CONCURRENCY < lines.length) {
             await delay(BATCH_DELAY_MS);
         }
       }
 
-      // IMMEDIATE AUTO SAVE AT END OF BATCH
       if (activeProjectId) {
-           performAutoSave();
+           await performAutoSave();
       }
 
       if (!stopRef.current) {
@@ -791,7 +576,7 @@ const App: React.FC = () => {
       setState(prev => ({ ...prev, isLoading: false }));
       setEstimatedTimeLeft(null);
     }
-  }, [activeProjectId, state.results, quotaUsed, projects]); 
+  }, [activeProjectId, state.results, projects, columnLabels]); 
 
 
   const handleStop = () => { stopRef.current = true; setState(prev => ({ ...prev, isLoading: false })); };
@@ -852,7 +637,6 @@ const App: React.FC = () => {
       if (type === 'phone') setExportFilters(prev => ({ ...prev, excludeNoPhone: !prev.excludeNoPhone }));
   };
 
-  // AUTH PROTECTION
   if (authLoading) {
       return (
         <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 gap-4">
@@ -884,7 +668,6 @@ const App: React.FC = () => {
 
       <main className="max-w-[1800px] mx-auto px-4 sm:px-6 lg:px-8 pt-28 pb-24 relative z-10">
         
-        {/* Active Session Alert */}
         {activeSession && !state.isLoading && (
             <div className="mb-8 p-4 rounded-xl bg-white border border-indigo-100 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 animate-in slide-in-from-top-4 shadow-lg shadow-indigo-100/50">
                 <div className="flex items-start gap-3">
@@ -916,9 +699,8 @@ const App: React.FC = () => {
             isLoading={state.isLoading} 
             projects={projects}
             activeProjectId={activeProjectId}
-            onSelectProject={handleSelectProject}
+            onSelectProject={selectProjectAndLoadContent}
             onCreateProject={handleCreateProject}
-            // Quota props
             quotaLimit={quotaLimit}
             quotaUsed={quotaUsed}
             onUpdateQuotaLimit={handleUpdateQuotaLimit}
@@ -999,7 +781,6 @@ const App: React.FC = () => {
               </div>
               
               <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center bg-white p-2 rounded-xl border border-slate-200 shadow-sm w-full xl:w-auto">
-                {/* CONFIG BUTTON */}
                 <button onClick={() => setShowColumnModal(true)} className="flex items-center gap-2 px-3 py-2 text-xs font-medium text-slate-600 hover:bg-slate-50 rounded-lg transition-colors border border-transparent hover:border-slate-200">
                     <TableProperties className="w-3.5 h-3.5" />
                     <span className="hidden sm:inline">Colonnes</span>
@@ -1024,7 +805,6 @@ const App: React.FC = () => {
             <ResultTable 
                 data={getFilteredData()} 
                 onUpdate={handleUpdateResult} 
-                isIncognito={isIncognito}
                 columnLabels={columnLabels}
             />
 
@@ -1042,7 +822,7 @@ const App: React.FC = () => {
             onClose={() => setShowProjectModal(false)}
             projects={projects}
             activeProjectId={activeProjectId}
-            onSelectProject={handleSelectProject}
+            onSelectProject={selectProjectAndLoadContent}
             onDeleteProject={handleDeleteProject}
             onExportProject={handleExportProject}
         />

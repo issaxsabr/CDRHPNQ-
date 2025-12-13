@@ -221,7 +221,7 @@ export const enrichWithGemini = async (context: any, query: string): Promise<any
 
         if (error) {
             console.error("Erreur Proxy Gemini:", error);
-            return {};
+            throw new Error(`Proxy Gemini Error: ${error.message || 'Unknown error'}`);
         }
 
         // Parsing de la réponse REST de Gemini
@@ -231,11 +231,12 @@ export const enrichWithGemini = async (context: any, query: string): Promise<any
         if (textResponse) {
             return JSON.parse(textResponse);
         }
-        return {};
+        
+        throw new Error("Empty or invalid response from Gemini enrichment");
 
-    } catch (e) {
+    } catch (e: any) {
         console.error("Erreur d'enrichissement Gemini (Proxy):", e);
-        return {};
+        throw new Error(`Gemini Enrichment Failed: ${e.message || e}`);
     }
 }
 

@@ -8,7 +8,6 @@ import AutoSizer from 'react-virtualized-auto-sizer';
 interface ResultTableProps {
   data: BusinessData[];
   onUpdate: (index: number, field: keyof BusinessData, value: any) => void;
-  isIncognito?: boolean;
   columnLabels: ColumnLabelMap;
 }
 
@@ -83,7 +82,7 @@ const EditableCell = ({
     );
 };
 
-const ResultTable: React.FC<ResultTableProps> = ({ data, onUpdate, isIncognito = false, columnLabels }) => {
+const ResultTable: React.FC<ResultTableProps> = ({ data, onUpdate, columnLabels }) => {
   if (data.length === 0) {
     return null;
   }
@@ -153,7 +152,7 @@ const ResultTable: React.FC<ResultTableProps> = ({ data, onUpdate, isIncognito =
         <div className="px-4 py-2 flex flex-col gap-1 h-full justify-center relative border-r border-transparent group-hover:border-slate-100">
             <div className="flex items-start gap-3">
                 <div className="shrink-0 mt-0.5">
-                    {item.website && !isIncognito ? (
+                    {item.website ? (
                         <img 
                             src={`https://www.google.com/s2/favicons?domain=${domain}&sz=64`} 
                             alt="logo" 

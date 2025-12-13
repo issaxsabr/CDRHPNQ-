@@ -88,3 +88,35 @@ export interface SavedSession {
     strategy: SerperStrategy;
   };
 }
+
+// Nouveaux types pour l'API File System Access
+export interface FileSystemDirectoryHandle {
+  kind: 'directory';
+  name: string;
+  queryPermission(descriptor?: FileSystemHandlePermissionDescriptor): Promise<PermissionState>;
+  requestPermission(descriptor?: FileSystemHandlePermissionDescriptor): Promise<PermissionState>;
+  getFileHandle(name: string, options?: { create?: boolean }): Promise<FileSystemFileHandle>;
+  values(): AsyncIterable<FileSystemDirectoryHandle | FileSystemFileHandle>;
+}
+
+export interface FileSystemFileHandle {
+    kind: 'file';
+    name: string;
+    createWritable(): Promise<FileSystemWritableFileStream>;
+}
+
+export interface FileSystemWritableFileStream extends WritableStream {
+    write(data: any): Promise<void>;
+    close(): Promise<void>;
+}
+
+export interface FileSystemHandlePermissionDescriptor {
+    mode: 'read' | 'readwrite';
+}
+
+// Ajout pour corriger le problème @ts-ignore dans App.tsx
+declare global {
+  interface Window {
+    showDirectoryPicker(): Promise<FileSystemDirectoryHandle>;
+  }
+}
