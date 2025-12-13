@@ -1,0 +1,22 @@
+{
+  "name": "CDRHPNQ Scavenger",
+  "short_name": "Scavenger",
+  "description": "Outil professionnel d'enrichissement et de vérification de données B2B.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#F8FAFC",
+  "theme_color": "#F8FAFC",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/2838/2838912.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/2838/2838912.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
