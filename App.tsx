@@ -12,9 +12,11 @@ import { ToastProvider, useToast } from './contexts/ToastContext';
 import { supabase } from './services/supabase';
 import { extractDataFromContext, enrichWithGemini } from './services/gemini';
 import { searchWithSerper } from './services/serper';
-import { cacheService, projectService, blacklistService, globalIndexService } from './services/storage';
+import { cacheService, projectService, blacklistService } from './services/storage';
 import { BusinessData, ScraperState, ScraperProvider, CountryCode, SavedSession, SerperStrategy, Project, ColumnLabelMap } from './types';
 import { getInteractiveHTMLContent, createExcelWorkbook, exportToExcel } from './utils/exportUtils';
+import { validateAndSanitize } from './utils/validation';
+import { z } from 'zod';
 import { CONFIG } from './config';
 
 // Hooks
@@ -71,6 +73,7 @@ const mergeNewResults = (currentResults: BusinessData[], newResults: BusinessDat
         decisionMakers: (newItem.decisionMakers && newItem.decisionMakers.length > 0) ? newItem.decisionMakers : existing.decisionMakers,
         customField: existing.customField || newItem.customField,
         qualityScore: newItem.qualityScore || existing.qualityScore,
+        id: existing.id || newItem.id, // Keep ID
       };
     } else {
       updatedList.push(newItem);
@@ -93,22 +96,17 @@ const AppContent: React.FC = () => {
   
   const [timelineSteps, setTimelineSteps] = useState<TimelineStep[]>([]);
 
-  // Auth State (FIX: Replaced 'any' with Supabase 'Session' type)
   const [session, setSession] = useState<Session | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
 
-  // Column Customization
   const [columnLabels, setColumnLabels] = useState<ColumnLabelMap>(DEFAULT_LABELS);
   const [showColumnModal, setShowColumnModal] = useState(false);
   
-  // Custom Hooks
   const { quotaLimit, quotaUsed, updateQuotaUsed, handleUpdateQuotaLimit, handleResetQuota } = useQuota(5000);
   const { projects, activeProjectId, setActiveProjectId, loadProjects, handleCreateProject, handleDeleteProject, handleSelectProject } = useProjects();
   const { dirHandle, setDirHandle, hasStoredHandle, lastAutoSave, performAutoSave, restoreFolderConnection, handleConnectLocalFolder } = useAutoSave(activeProjectId, projects, columnLabels, addToast);
 
-  // Project Management
   const [showProjectModal, setShowProjectModal] = useState(false);
-
   const [historyCount, setHistoryCount] = useState(0);
   const [activeSession, setActiveSession] = useState<SavedSession | null>(null);
 
@@ -125,7 +123,6 @@ const AppContent: React.FC = () => {
     excludeDuplicates: false, onlyWithEmail: false
   });
   
-  // Onboarding Tour State
   const [isTourActive, setIsTourActive] = useState(false);
 
   useEffect(() => {
@@ -151,10 +148,8 @@ const AppContent: React.FC = () => {
         setSession(session);
     });
 
-    // Check if onboarding tour should run
     const tourCompleted = localStorage.getItem('scavenger_onboarding_complete_v1');
     if (!tourCompleted) {
-        // Start tour automatically after a short delay for the UI to mount
         const timer = setTimeout(() => setIsTourActive(true), 1500);
         return () => {
             subscription.unsubscribe();
@@ -252,17 +247,9 @@ const AppContent: React.FC = () => {
 
   const saveSession = useCallback((query: string, currentIndex: number, results: BusinessData[], config: SavedSession['config']) => {
       try {
-          const sessionData: SavedSession = {
-              query,
-              currentIndex,
-              results,
-              timestamp: Date.now(),
-              config
-          };
+          const sessionData: SavedSession = { query, currentIndex, results, timestamp: Date.now(), config };
           localStorage.setItem(CONFIG.SESSION_KEY, JSON.stringify(sessionData));
-      } catch (e) {
-          console.warn("Failed to save session", e);
-      }
+      } catch (e) { console.warn("Failed to save session", e); }
   }, []);
 
   const discardSession = () => {
@@ -319,50 +306,52 @@ const AppContent: React.FC = () => {
   };
 
   const handleUpdateResult = useCallback((index: number, field: keyof BusinessData, value: any) => {
-    setState(prev => {
-        const newResults = [...prev.results];
+    try {
+        const updatedItem = { ...state.results[index] };
+        const sanitizedUpdate = validateAndSanitize(field, value);
+        const sanitizedValue = sanitizedUpdate[field];
+
         if (field === 'phone') {
-             newResults[index] = { ...newResults[index], phone: value };
-             const oldPhones = newResults[index].phones || [];
-             if (oldPhones.length > 0) oldPhones[0] = value;
-             else newResults[index].phones = [value];
-        }
-        else if (field === 'email') {
-             newResults[index] = { ...newResults[index], email: value };
-             const oldEmails = newResults[index].emails || [];
-             if (oldEmails.length > 0) oldEmails[0] = value;
-             else newResults[index].emails = [value];
-        }
-        else {
-            newResults[index] = { ...newResults[index], [field]: value };
+            updatedItem.phone = sanitizedValue as string;
+            if (!updatedItem.phones || updatedItem.phones.length === 0) updatedItem.phones = [sanitizedValue as string];
+            else updatedItem.phones[0] = sanitizedValue as string;
+        } else if (field === 'email') {
+            updatedItem.email = sanitizedValue as string;
+            if (!updatedItem.emails || updatedItem.emails.length === 0) updatedItem.emails = [sanitizedValue as string];
+            else updatedItem.emails[0] = sanitizedValue as string;
+        } else {
+            (updatedItem as any)[field] = sanitizedValue;
         }
 
-        if (activeProjectId) {
-             projectService.updateProjectContent(activeProjectId, newResults);
+        setState(prev => {
+            const newResults = [...prev.results];
+            newResults[index] = updatedItem;
+            return { ...prev, results: newResults };
+        });
+
+        if (activeProjectId && updatedItem.id) {
+            projectService.updateProjectItem(activeProjectId, updatedItem);
         }
+    } catch (error) {
+        if (error instanceof z.ZodError) {
+            addToast({
+                type: 'error', title: 'Erreur de validation',
+                message: error.issues[0].message || 'Format de donnée invalide.'
+            });
+        } else {
+            console.error("Update Error:", error);
+            addToast({ type: 'error', title: 'Erreur Inconnue', message: 'Une erreur est survenue lors de la mise à jour.' });
+        }
+    }
+  }, [activeProjectId, addToast, state.results]);
 
-        return { ...prev, results: newResults };
-    });
-  }, [activeProjectId]);
-
-  const processSingleQuery = async (
-      query: string, provider: ScraperProvider, serperKey: string, country: string, strategy: SerperStrategy
-  ): Promise<{ businesses: BusinessData[], rawText: string, qualityScore?: number }> => {
-      const serperData = await searchWithSerper(
-        query, 
-        serperKey, 
-        country, 
-        strategy,
-        { enableDecisionMakerSearch: strategy === 'maps_web_enrich' }
-      );
+  const processSingleQuery = async (query: string, provider: ScraperProvider, serperKey: string, country: string, strategy: SerperStrategy): Promise<{ businesses: BusinessData[], rawText: string, qualityScore?: number }> => {
+      const serperData = await searchWithSerper(query, serperKey, country, strategy, { enableDecisionMakerSearch: strategy === 'maps_web_enrich' });
       const geminiEnrichmentData = await enrichWithGemini(serperData, query);
       return await extractDataFromContext(query, serperData, geminiEnrichmentData);
   };
   
-  const handleSearch = useCallback(async (
-      query: string, useLocation: boolean, isBatch: boolean, isSafeMode: boolean, isPaidMode: boolean,
-      provider: ScraperProvider, serperKey: string, country: CountryCode, strategy: SerperStrategy, startIndex: number = 0
-  ) => {
+  const handleSearch = useCallback(async (query: string, useLocation: boolean, isBatch: boolean, isSafeMode: boolean, isPaidMode: boolean, provider: ScraperProvider, serperKey: string, country: CountryCode, strategy: SerperStrategy, startIndex: number = 0) => {
     stopRef.current = false;
     setEstimatedTimeLeft(null);
     setActiveSession(null);
@@ -371,19 +360,18 @@ const AppContent: React.FC = () => {
     const costPerQuery = CONFIG.COSTS[strategy] || 3;
 
     if (!isBatch) {
+      if (!activeProjectId) {
+        addToast({ type: 'error', title: 'Aucun dossier actif', message: 'Veuillez sélectionner ou créer un dossier avant de lancer une recherche.' });
+        return;
+      }
+      
       const cached = await cacheService.get(query);
       if (cached) {
           const newResult = { ...cached, status: cached.status + " (Cache)" };
-          setState(prev => {
-            if (stopRef.current) return prev; 
-            const updated = mergeNewResults(prev.results, [newResult]);
-            return { ...prev, isLoading: false, results: updated, error: null };
-          });
-          if (activeProjectId) {
-              await projectService.addResultsToProject(activeProjectId, [newResult]);
-              await loadProjects(); 
-              await performAutoSave();
-          }
+          setState(prev => ({ ...prev, isLoading: false, results: mergeNewResults(prev.results, [newResult]), error: null }));
+          await projectService.addResultsToProject(activeProjectId, [newResult]);
+          await loadProjects();
+          await performAutoSave();
           return;
       }
 
@@ -397,24 +385,21 @@ const AppContent: React.FC = () => {
 
         if (businesses.length > 0) {
             let item = businesses[0];
-            const blCheck = blacklistService.isBlacklisted(item);
-            if (blCheck.isBlacklisted) {
-                item = { ...item, status: `Ignoré: ${blCheck.reason}`, email: undefined, phone: undefined };
-            } else if (activeProjectId) {
-                const dupCheck = await globalIndexService.checkDuplicate(item);
-                if (dupCheck.isDuplicate && dupCheck.projectId !== activeProjectId) {
-                     const projName = await projectService.getProjectName(dupCheck.projectId || '');
-                     item = { ...item, status: `Doublon (Dossier: ${projName})` };
-                }
-            }
             await cacheService.set(query, item);
             await refreshHistoryCount();
             
-            if (activeProjectId && !blCheck.isBlacklisted) {
-                await projectService.addResultsToProject(activeProjectId, [item]);
-                await loadProjects();
-                await performAutoSave();
+            const addResults = await projectService.addResultsToProject(activeProjectId, [item]);
+            const resultStatus = addResults[0];
+
+            if(resultStatus.status === 'duplicate') {
+                const projName = await projectService.getProjectName(resultStatus.duplicateProjectId || '');
+                item.status = `Doublon (Dossier: ${projName})`;
+            } else if (resultStatus.status === 'blacklisted') {
+                item.status = resultStatus.item.status;
             }
+
+            await loadProjects();
+            await performAutoSave();
             
             setState(prev => ({ ...prev, isLoading: false, results: mergeNewResults(prev.results, [item]), rawText: rawText }));
         } else {
@@ -429,6 +414,11 @@ const AppContent: React.FC = () => {
       }
 
     } else {
+       if (!activeProjectId) {
+        addToast({ type: 'error', title: 'Aucun dossier actif', message: 'Veuillez sélectionner ou créer un dossier avant de lancer un batch.' });
+        return;
+      }
+
       const lines = query.split('\n').map(l => l.trim()).filter(l => l.length > 0);
       if (lines.length === 0) return;
 
@@ -463,50 +453,35 @@ const AppContent: React.FC = () => {
             
             const realApiCallCount = batchResults.filter(r => !r.fromCache && r.success).length;
             if (realApiCallCount > 0) updateQuotaUsed(realApiCallCount * costPerQuery);
-
-            const validResultsToAdd: BusinessData[] = [];
-            const resultsToDisplay: BusinessData[] = [];
             
-            for (const res of batchResults) {
-                if (res.success && res.data) {
-                    let item = res.data;
-                    let saveToProject = true;
-                    const blCheck = blacklistService.isBlacklisted(item);
-                    if (blCheck.isBlacklisted) {
-                        item = { ...item, status: `Ignoré (Blacklist)`, email: undefined, phone: undefined };
-                        saveToProject = false;
-                    }
-                    if (saveToProject && activeProjectId) {
-                        const dupCheck = await globalIndexService.checkDuplicate(item);
-                        if (dupCheck.isDuplicate && dupCheck.projectId !== activeProjectId) {
-                            const projName = await projectService.getProjectName(dupCheck.projectId || '');
-                            item = { ...item, status: `Doublon (Dossier: ${projName})` };
-                        }
-                    }
-                    resultsToDisplay.push(item);
-                    if (saveToProject) {
-                        validResultsToAdd.push(item);
-                        if (!res.fromCache) await cacheService.set(item.searchedTerm || item.name, item);
-                    }
-                } else if (!res.success && res.data) {
-                    resultsToDisplay.push(res.data);
-                }
-            }
+            const resultsToProcess = batchResults.map(res => res.success && res.data ? res.data : (res.data || null)).filter(Boolean) as BusinessData[];
+            const dbAddResults = await projectService.addResultsToProject(activeProjectId, resultsToProcess);
+            
+            const projectNames: Record<string, string> = {};
 
-            if (validResultsToAdd.length > 0) {
-                await refreshHistoryCount();
-                if (activeProjectId) await projectService.addResultsToProject(activeProjectId, validResultsToAdd);
-            }
+            const finalResults = await Promise.all(dbAddResults.map(async (res, index) => {
+                if (res.status === 'duplicate' && res.duplicateProjectId && !projectNames[res.duplicateProjectId]) {
+                    projectNames[res.duplicateProjectId] = await projectService.getProjectName(res.duplicateProjectId);
+                }
+                if(res.status === 'duplicate') {
+                   res.item.status = `Doublon (Dossier: ${projectNames[res.duplicateProjectId || ''] || 'Inconnu'})`;
+                }
+                // FIX: Correlate with `batchResults` using index to check `fromCache` property.
+                if (batchResults[index]?.fromCache === false && res.status === 'added') await cacheService.set(res.item.searchedTerm || res.item.name, res.item);
+                return res.item;
+            }));
+
+            if (finalResults.length > 0) await refreshHistoryCount();
             
             setState(prev => {
                 if (stopRef.current) return prev;
-                const newResults = mergeNewResults(prev.results, resultsToDisplay);
+                const newResults = mergeNewResults(prev.results, finalResults);
                 const nextIndex = Math.min(i + CONFIG.BATCH_CONCURRENCY, lines.length);
                 saveSession(query, nextIndex, newResults, { isPaidMode, serperKey, country, strategy });
                 return { ...prev, progress: { current: nextIndex, total: lines.length }, results: newResults };
             });
                 
-            if (activeProjectId) await loadProjects();
+            await loadProjects();
             if (i + CONFIG.BATCH_CONCURRENCY < lines.length) await delay(CONFIG.BATCH_DELAY_MS);
         } catch (err: any) {
             if (stopRef.current) break;
@@ -519,7 +494,7 @@ const AppContent: React.FC = () => {
             const errorMessage = err.message || "Erreur lors de la récupération.";
             setState(prev => ({ ...prev, isLoading: false, error: errorMessage }));
             addToast({ type: 'error', title: "Erreur de Recherche par lot", message: errorMessage });
-            break; // Stop batch on error
+            break;
         }
       }
 
@@ -534,7 +509,7 @@ const AppContent: React.FC = () => {
       
       if (activeProjectId) await performAutoSave();
       if (!stopRef.current) localStorage.removeItem(CONFIG.SESSION_KEY);
-      if (activeProjectId) await loadProjects();
+      await loadProjects();
       
       setState(prev => ({ ...prev, isLoading: false }));
       setEstimatedTimeLeft(null);
@@ -543,27 +518,15 @@ const AppContent: React.FC = () => {
 
   const resumeSession = useCallback(() => {
     if (!activeSession) return;
-    setState(prev => ({
-        ...prev,
-        results: activeSession.results,
-        progress: { current: activeSession.currentIndex, total: activeSession.query.split('\n').filter(l => l.trim()).length }
-    }));
-
-    handleSearch(
-        activeSession.query, false, true, true, activeSession.config.isPaidMode, 'serper_eco',
-        activeSession.config.serperKey, activeSession.config.country, activeSession.config.strategy, activeSession.currentIndex
-    );
+    setState(prev => ({ ...prev, results: activeSession.results, progress: { current: activeSession.currentIndex, total: activeSession.query.split('\n').filter(l => l.trim()).length } }));
+    handleSearch(activeSession.query, false, true, true, activeSession.config.isPaidMode, 'serper_eco', activeSession.config.serperKey, activeSession.config.country, activeSession.config.strategy, activeSession.currentIndex);
     setActiveSession(null);
   }, [activeSession, handleSearch]);
 
   const handleStop = () => { 
       stopRef.current = true; 
       setState(prev => ({ ...prev, isLoading: false }));
-      setTimelineSteps(prev => [
-          prev[0],
-          { title: "Recherche & Analyse", description: "Arrêt manuel par l'utilisateur.", status: 'failed' },
-          { title: "Finalisation", description: "Processus interrompu.", status: 'pending' },
-      ]);
+      setTimelineSteps(prev => [ prev[0], { title: "Recherche & Analyse", description: "Arrêt manuel par l'utilisateur.", status: 'failed' }, { title: "Finalisation", description: "Processus interrompu.", status: 'pending' }, ]);
       addToast({type: 'info', title: 'Arrêt Manuel', message: 'Le traitement du lot a été interrompu.'})
   };
 
@@ -571,12 +534,7 @@ const AppContent: React.FC = () => {
 
   const filteredData = useMemo(() => {
     let dataToExport = [...state.results];
-    if (exportFilters.excludeClosed) {
-        dataToExport = dataToExport.filter(r => {
-             const s = r.status?.toLowerCase() || "";
-             return !s.includes('fermé') && !s.includes('closed') && !s.includes('définitiv');
-        });
-    }
+    if (exportFilters.excludeClosed) dataToExport = dataToExport.filter(r => !r.status?.toLowerCase().includes('ferm') && !r.status?.toLowerCase().includes('définitiv'));
     if (exportFilters.excludeNoPhone) dataToExport = dataToExport.filter(r => r.phone && r.phone !== 'N/A' && r.phone.trim() !== '');
     if (exportFilters.onlyWithEmail) dataToExport = dataToExport.filter(r => r.email && r.email.trim() !== '');
     if (exportFilters.excludeDuplicates) {
@@ -613,59 +571,20 @@ const AppContent: React.FC = () => {
   }, [filteredData, activeProjectId, projects, generateInteractiveHTML]);
 
   const stats = useMemo(() => {
-      const actives = state.results.filter(r => {
-          const s = r.status?.toLowerCase() || "";
-          return s.includes('activ') || s.includes('ouvert') || s.includes('web') || s.includes('trouvé') || s.includes('(cache)');
-      }).length;
-
-      const closed = state.results.filter(r => {
-          const s = r.status?.toLowerCase() || "";
-          return s.includes('définitiv') || s.includes('permanent');
-      }).length;
-      
-      const warnings = state.results.filter(r => {
-          const s = r.status?.toLowerCase() || "";
-          return s.includes('ferm') || s.includes('doublon') || s.includes('ignoré') || s.includes('erreur');
-      }).length;
-
+      const actives = state.results.filter(r => (r.status?.toLowerCase().includes('activ') || r.status?.toLowerCase().includes('ouvert') || r.status?.toLowerCase().includes('web') || r.status?.toLowerCase().includes('trouvé') || r.status?.toLowerCase().includes('(cache)'))).length;
+      const closed = state.results.filter(r => (r.status?.toLowerCase().includes('définitiv') || r.status?.toLowerCase().includes('permanent'))).length;
+      const warnings = state.results.filter(r => (r.status?.toLowerCase().includes('ferm') || r.status?.toLowerCase().includes('doublon') || r.status?.toLowerCase().includes('ignoré') || r.status?.toLowerCase().includes('erreur'))).length;
       const emails = state.results.filter(r => r.email && r.email.trim() !== '').length;
-
-      return {
-          actives,
-          closed,
-          warnings,
-          emails
-      };
+      return { actives, closed, warnings, emails };
   }, [state.results]);
 
-  if (authLoading) {
-      return (
-        <Suspense fallback={<div className="fixed inset-0 bg-slate-900" />}>
-            <LoadingScreen />
-        </Suspense>
-      );
-  }
-
-  if (!session) {
-      return (
-        <div className="relative min-h-screen">
-             <div className="absolute inset-0 bg-slate-100 blur-sm z-0"></div>
-             <AuthOverlay onLoginSuccess={() => setAuthLoading(false)} />
-        </div>
-      );
-  }
+  if (authLoading) { return ( <Suspense fallback={<div className="fixed inset-0 bg-slate-900" />}><LoadingScreen /></Suspense> ); }
+  if (!session) { return ( <div className="relative min-h-screen"> <div className="absolute inset-0 bg-slate-100 blur-sm z-0"></div> <AuthOverlay onLoginSuccess={() => setAuthLoading(false)} /> </div> ); }
 
   return (
     <div className="min-h-screen font-sans text-slate-800">
       
-      <Header 
-        projectCount={projects.length}
-        historyCount={historyCount}
-        onLogout={handleLogout}
-        onOpenProjectModal={() => setShowProjectModal(true)}
-        onOpenCacheModal={openCacheModal}
-        onStartTour={startTour}
-      />
+      <Header projectCount={projects.length} historyCount={historyCount} onLogout={handleLogout} onOpenProjectModal={() => setShowProjectModal(true)} onOpenCacheModal={openCacheModal} onStartTour={startTour} />
 
       <main className="max-w-[1800px] mx-auto px-4 sm:px-6 lg:px-8 pt-28 pb-24 relative z-10">
         
@@ -695,32 +614,11 @@ const AppContent: React.FC = () => {
           </h2>
         </div>
 
-        <SearchBar 
-            onSearch={handleSearch} 
-            isLoading={state.isLoading} 
-            projects={projects}
-            activeProjectId={activeProjectId}
-            onSelectProject={selectProjectAndLoadContent}
-            onCreateProject={(name) => {
-                handleCreateProject(name);
-                addToast({type: 'success', title: 'Dossier Créé', message: `Le dossier "${name}" est maintenant actif.`});
-            }}
-            quotaLimit={quotaLimit}
-            quotaUsed={quotaUsed}
-            onUpdateQuotaLimit={handleUpdateQuotaLimit}
-            onResetQuota={handleResetQuota}
-        />
+        <SearchBar onSearch={handleSearch} isLoading={state.isLoading} projects={projects} activeProjectId={activeProjectId} onSelectProject={selectProjectAndLoadContent} onCreateProject={(name) => { handleCreateProject(name); addToast({type: 'success', title: 'Dossier Créé', message: `Le dossier "${name}" est maintenant actif.`}); }} quotaLimit={quotaLimit} quotaUsed={quotaUsed} onUpdateQuotaLimit={handleUpdateQuotaLimit} onResetQuota={handleResetQuota} />
 
         <Suspense fallback={<div className="h-40" />}>
             {state.isBatchMode && (state.isLoading || state.progress.current > 0) && (
-              <BatchProgress
-                  progress={state.progress.current}
-                  total={state.progress.total}
-                  estimatedTimeLeft={estimatedTimeLeft}
-                  timelineSteps={timelineSteps}
-                  onStop={handleStop}
-                  isLoading={state.isLoading}
-              />
+              <BatchProgress progress={state.progress.current} total={state.progress.total} estimatedTimeLeft={estimatedTimeLeft} timelineSteps={timelineSteps} onStop={handleStop} isLoading={state.isLoading} />
             )}
         </Suspense>
 
@@ -745,20 +643,12 @@ const AppContent: React.FC = () => {
                     <div className="flex items-center gap-2">
                          {!dirHandle ? (
                             hasStoredHandle ? (
-                                <button 
-                                    onClick={restoreFolderConnection} 
-                                    className="flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold text-indigo-600 bg-indigo-50 border border-indigo-200 rounded-lg shadow-sm hover:bg-indigo-100 transition-colors animate-pulse"
-                                    title="Restaurer l'accès au dossier local pour ce projet"
-                                >
+                                <button onClick={restoreFolderConnection} className="flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold text-indigo-600 bg-indigo-50 border border-indigo-200 rounded-lg shadow-sm hover:bg-indigo-100 transition-colors animate-pulse" title="Restaurer l'accès au dossier local pour ce projet">
                                     <RotateCw className="w-3 h-3" />
                                     <span className="hidden sm:inline">Reconnecter Dossier</span>
                                 </button>
                             ) : (
-                                <button 
-                                    onClick={handleConnectLocalFolder} 
-                                    className="flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold text-slate-500 bg-white border border-slate-200 rounded-lg shadow-sm hover:text-indigo-600 hover:border-indigo-300 transition-colors"
-                                    title="Lier un dossier local à ce projet pour la sauvegarde auto"
-                                >
+                                <button onClick={handleConnectLocalFolder} className="flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold text-slate-500 bg-white border border-slate-200 rounded-lg shadow-sm hover:text-indigo-600 hover:border-indigo-300 transition-colors" title="Lier un dossier local à ce projet pour la sauvegarde auto">
                                     <HardDrive className="w-3 h-3" />
                                     <span className="hidden sm:inline">Connecter Dossier Local</span>
                                 </button>
@@ -797,11 +687,7 @@ const AppContent: React.FC = () => {
               </div>
             </div>
 
-            <ResultTable 
-                data={filteredData} 
-                onUpdate={handleUpdateResult} 
-                columnLabels={columnLabels}
-            />
+            <ResultTable data={filteredData} onUpdate={handleUpdateResult} columnLabels={columnLabels} />
 
             <div className="mt-8 p-4 rounded-xl bg-white border border-slate-200 text-xs text-slate-500 flex items-start gap-3 max-w-2xl mx-auto shadow-sm animate-fade-in">
                <Info className="w-4 h-4 mt-0.5 shrink-0 text-indigo-500" />
@@ -813,33 +699,9 @@ const AppContent: React.FC = () => {
         )}
         
         <Suspense fallback={<div className="fixed inset-0 bg-black/10 z-[101]" />}>
-            <ProjectModal 
-                isOpen={showProjectModal}
-                onClose={() => setShowProjectModal(false)}
-                projects={projects}
-                activeProjectId={activeProjectId}
-                onSelectProject={selectProjectAndLoadContent}
-                onDeleteProject={handleDeleteProject}
-                onExportProject={handleExportProject}
-            />
-
-            <ColumnConfigModal 
-                isOpen={showColumnModal}
-                onClose={() => setShowColumnModal(false)}
-                columnLabels={columnLabels}
-                onSaveColumnLabels={saveColumnLabels}
-            />
-
-            <CacheModal 
-                isOpen={showCacheModal}
-                onClose={() => setShowCacheModal(false)}
-                cachedItems={cachedItems}
-                selectedCacheKeys={selectedCacheKeys}
-                onClearCache={handleClearCache}
-                onToggleSelectCacheItem={toggleSelectCacheItem}
-                onToggleSelectAllCache={toggleSelectAllCache}
-            />
-            
+            <ProjectModal isOpen={showProjectModal} onClose={() => setShowProjectModal(false)} projects={projects} activeProjectId={activeProjectId} onSelectProject={selectProjectAndLoadContent} onDeleteProject={handleDeleteProject} onExportProject={handleExportProject} />
+            <ColumnConfigModal isOpen={showColumnModal} onClose={() => setShowColumnModal(false)} columnLabels={columnLabels} onSaveColumnLabels={saveColumnLabels} />
+            <CacheModal isOpen={showCacheModal} onClose={() => setShowCacheModal(false)} cachedItems={cachedItems} selectedCacheKeys={selectedCacheKeys} onClearCache={handleClearCache} onToggleSelectCacheItem={toggleSelectCacheItem} onToggleSelectAllCache={toggleSelectAllCache} />
             <OnboardingGuide isOpen={isTourActive} onClose={endTour} />
         </Suspense>
         
@@ -848,11 +710,5 @@ const AppContent: React.FC = () => {
   );
 };
 
-const App: React.FC = () => (
-    <ToastProvider>
-        <AppContent />
-    </ToastProvider>
-);
-
-
+const App: React.FC = () => ( <ToastProvider> <AppContent /> </ToastProvider> );
 export default App;

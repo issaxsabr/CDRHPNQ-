@@ -1,6 +1,7 @@
 
 
 
+
 export interface ContactPerson {
   name: string;
   title?: string; // CEO, Fondateur, Directeur, Gérant...
@@ -8,6 +9,8 @@ export interface ContactPerson {
 }
 
 export interface BusinessData {
+  id?: string; // UUID unique pour chaque enregistrement dans la DB
+  projectId?: string; // ID du projet parent
   name: string;
   status: string; // Statut opérationnel (Ouvert, Fermé...)
   address: string;

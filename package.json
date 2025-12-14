@@ -15,10 +15,12 @@
     "@google/genai": "^1.30.0",
     "react-window": "1.8.10",
     "react-virtualized-auto-sizer": "1.0.24",
-    "idb-keyval": "6.2.1",
+    "idb": "8.0.0",
     "xlsx": "latest",
     "@supabase/supabase-js": "2.42.0",
-    "lz-string": "1.5.0"
+    "lz-string": "1.5.0",
+    "zod": "3.23.8",
+    "isomorphic-dompurify": "1.9.0"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",
