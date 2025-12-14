@@ -26,11 +26,11 @@ const ColumnConfigModal: React.FC<ColumnConfigModalProps> = ({ isOpen, onClose, 
 
     return (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-            <div className="absolute inset-0 bg-slate-900/20 backdrop-blur-sm transition-opacity" onClick={onClose} />
-            <div className="relative w-full max-w-md bg-white rounded-2xl shadow-2xl border border-slate-100 flex flex-col animate-in zoom-in-95 duration-200">
+            <div className="absolute inset-0 glass-dark transition-opacity" onClick={onClose} />
+            <div className="relative w-full max-w-md bg-white rounded-2xl shadow-2xl flex flex-col animate-scale-in glass">
                     <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50 rounded-t-2xl">
-                    <div className="flex items-center gap-2 text-slate-800"><Settings2 className="w-5 h-5 text-indigo-500" /><h3 className="font-bold text-lg">Configurer les colonnes</h3></div>
-                    <button onClick={onClose} className="p-1 hover:bg-slate-100 rounded-full text-slate-400"><X className="w-5 h-5" /></button>
+                    <div className="flex items-center gap-2"><Settings2 className="w-5 h-5 text-indigo-500" /><h3 className="font-bold text-lg gradient-text">Configurer les colonnes</h3></div>
+                    <button onClick={onClose} aria-label="Fermer la modale de configuration" className="p-1 hover:bg-slate-100 rounded-full text-slate-400"><X className="w-5 h-5" /></button>
                 </div>
                 <div className="p-5 overflow-y-auto max-h-[60vh]">
                     <p className="text-xs text-slate-500 mb-4">Personnalisez les noms des en-têtes pour l'affichage et l'export Excel.</p>
@@ -42,7 +42,7 @@ const ColumnConfigModal: React.FC<ColumnConfigModalProps> = ({ isOpen, onClose, 
                                     type="text" 
                                     value={columnLabels[col.key]} 
                                     onChange={(e) => onSaveColumnLabels({...columnLabels, [col.key]: e.target.value})}
-                                    className="w-full mt-1 p-2 text-sm border border-slate-200 rounded-lg outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-50 transition-all bg-slate-50 focus:bg-white"
+                                    className="w-full mt-1 p-2 text-sm border border-slate-200 rounded-lg outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-50 transition-all bg-slate-50/50 focus:bg-white"
                                 />
                                 </div>
                             ))}

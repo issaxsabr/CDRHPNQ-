@@ -1,4 +1,5 @@
 
+
 import { supabase } from './supabase';
 import { BusinessData, ContactPerson } from "../types";
 
@@ -209,9 +210,8 @@ export const enrichWithGemini = async (context: any, query: string): Promise<any
                 payload: {
                     body: {
                         contents: [{ parts: [{ text: prompt }] }],
-                        generationConfig: {
+                        config: {
                             responseMimeType: "application/json",
-                            // On simplifie le schéma pour le proxy REST
                             temperature: 0.2
                         }
                     }
@@ -224,19 +224,49 @@ export const enrichWithGemini = async (context: any, query: string): Promise<any
             throw new Error(`Proxy Gemini Error: ${error.message || 'Unknown error'}`);
         }
 
-        // Parsing de la réponse REST de Gemini
-        // La structure est data.candidates[0].content.parts[0].text
-        const textResponse = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+        const candidate = data?.candidates?.[0];
+
+        if (!candidate) {
+            console.warn("Gemini response is missing 'candidates' array or is empty:", data);
+            return { error: "Invalid response structure from Gemini proxy", keyPeople: [] };
+        }
+
+        if (candidate.finishReason && candidate.finishReason !== "STOP") {
+            console.error(`Gemini generation stopped. Reason: ${candidate.finishReason}`, "Safety Ratings:", candidate.safetyRatings);
+            return { 
+                error: `Gemini generation stopped: ${candidate.finishReason}`,
+                keyPeople: [], 
+                emails: [], 
+                phones: [] 
+            };
+        }
+
+        const textResponse = candidate.content?.parts?.[0]?.text;
 
         if (textResponse) {
-            return JSON.parse(textResponse);
+            try {
+                return JSON.parse(textResponse);
+            } catch (parseError) {
+                console.warn("Failed to parse Gemini JSON, attempting to clean response...", textResponse);
+                const cleanedResponse = textResponse.replace(/```json/g, '').replace(/```/g, '').trim();
+                try {
+                    return JSON.parse(cleanedResponse);
+                } catch (retryParseError) {
+                    console.error("Failed to parse even after cleaning the Gemini JSON response:", cleanedResponse);
+                    return { error: "Failed to parse JSON response from Gemini", keyPeople: [] };
+                }
+            }
         }
         
+        console.warn("Gemini response was valid but contained no text part.", data);
         throw new Error("Empty or invalid response from Gemini enrichment");
 
     } catch (e: any) {
         console.error("Erreur d'enrichissement Gemini (Proxy):", e);
-        throw new Error(`Gemini Enrichment Failed: ${e.message || e}`);
+        if (e.message.startsWith('Gemini Enrichment Failed:')) {
+            throw e;
+        }
+        throw new Error(`Gemini Enrichment Failed: ${e.message || 'Unknown error'}`);
     }
 }
 

@@ -1,42 +1,119 @@
 
-import React from 'react';
-import { Database, Check, Mail, Phone } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { Mail, TrendingUp, TrendingDown, AlertTriangle } from 'lucide-react';
 
 interface DashboardStatsProps {
     stats: {
-        total: number;
+        actives: number;
+        closed: number;
+        warnings: number;
         emails: number;
-        phones: number;
     };
-    exportFilters: {
-        onlyWithEmail: boolean;
-        excludeNoPhone: boolean;
-        excludeClosed: boolean;
-        excludeDuplicates: boolean;
-    };
-    onToggleFilter: (type: 'email' | 'phone') => void;
 }
 
-const DashboardStats: React.FC<DashboardStatsProps> = ({ stats, exportFilters, onToggleFilter }) => {
+// Custom hook for number animation
+const useCountUp = (end: number, duration = 800) => {
+    const [count, setCount] = useState(0);
+    
+    useEffect(() => {
+        let start = 0;
+        const startTime = Date.now();
+
+        const easeOutCubic = (t: number) => (--t) * t * t + 1;
+
+        const animate = () => {
+            const now = Date.now();
+            const progress = (now - startTime) / duration;
+            
+            if (progress < 1) {
+                setCount(Math.round(start + (end - start) * easeOutCubic(progress)));
+                requestAnimationFrame(animate);
+            } else {
+                setCount(end);
+            }
+        };
+
+        setCount(0); // Reset before starting
+        requestAnimationFrame(animate);
+
+    }, [end, duration]);
+    
+    return count;
+};
+
+
+interface StatCardProps {
+    label: string;
+    value: number;
+    icon: React.ReactNode;
+    trendText: string;
+    color: 'emerald' | 'rose' | 'amber' | 'indigo';
+}
+
+const StatCard: React.FC<StatCardProps> = ({ label, value, icon, trendText, color }) => {
+    const animatedValue = useCountUp(value);
+    
+    const colors = {
+        emerald: 'text-emerald-600',
+        rose: 'text-rose-600',
+        amber: 'text-amber-600',
+        indigo: 'text-indigo-600',
+    };
+    const trendColors = {
+        emerald: 'stat-trend up',
+        rose: 'stat-trend down',
+        amber: 'stat-trend',
+        indigo: 'stat-trend',
+    };
+
     return (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 animate-in slide-in-from-bottom-8 duration-500">
-            <div className="p-5 rounded-xl bg-white border border-slate-200 flex flex-col items-center justify-center gap-1 shadow-sm transition-all hover:shadow-md">
-                <div className="p-2 bg-slate-100 rounded-lg text-slate-600 mb-1"><Database className="w-5 h-5" /></div>
-                <span className="text-3xl font-bold text-slate-900">{stats.total}</span>
-                <span className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">Entreprises</span>
+        <div className="card-hover bg-white rounded-xl p-5 border border-slate-200 shadow-sm text-center">
+            <div className={`stat-counter ${colors[color]}`} key={value}>
+                {animatedValue}
             </div>
-            <button onClick={() => onToggleFilter('email')} className={`p-5 rounded-xl border flex flex-col items-center justify-center gap-1 transition-all active:scale-95 cursor-pointer hover:shadow-md ${exportFilters.onlyWithEmail ? 'bg-indigo-50 border-indigo-200' : 'bg-white border-slate-200'}`}>
-                <div className="p-2 bg-indigo-50 rounded-lg text-indigo-600 mb-1">{exportFilters.onlyWithEmail ? <Check className="w-5 h-5"/> : <Mail className="w-5 h-5" />}</div>
-                <span className="text-3xl font-bold text-slate-900">{stats.emails}</span>
-                <span className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">Emails</span>
-            </button>
-            <button onClick={() => onToggleFilter('phone')} className={`p-5 rounded-xl border flex flex-col items-center justify-center gap-1 transition-all active:scale-95 cursor-pointer hover:shadow-md ${exportFilters.excludeNoPhone ? 'bg-indigo-50 border-indigo-200' : 'bg-white border-slate-200'}`}>
-                <div className="p-2 bg-indigo-50 rounded-lg text-indigo-600 mb-1">{exportFilters.excludeNoPhone ? <Check className="w-5 h-5"/> : <Phone className="w-5 h-5" />}</div>
-                <span className="text-3xl font-bold text-slate-900">{stats.phones}</span>
-                <span className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">Téléphones</span>
-            </button>
+            <div className="stat-label mt-1">{label}</div>
+            <div className={`${trendColors[color]}`}>
+                {icon}
+                <span>{trendText}</span>
+            </div>
         </div>
     );
 };
 
-export default DashboardStats;
+
+const DashboardStats: React.FC<DashboardStatsProps> = ({ stats }) => {
+    return (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6 animate-fade-in-up">
+            <StatCard 
+                label="Actives"
+                value={stats.actives}
+                icon={<TrendingUp className="w-3.5 h-3.5" />}
+                trendText="Données valides"
+                color="emerald"
+            />
+            <StatCard 
+                label="Fermées"
+                value={stats.closed}
+                icon={<TrendingDown className="w-3.5 h-3.5" />}
+                trendText="À retirer"
+                color="rose"
+            />
+            <StatCard 
+                label="À vérifier"
+                value={stats.warnings}
+                icon={<AlertTriangle className="w-3.5 h-3.5" />}
+                trendText="Statut incertain"
+                color="amber"
+            />
+            <StatCard 
+                label="Emails Trouvés"
+                value={stats.emails}
+                icon={<Mail className="w-3.5 h-3.5" />}
+                trendText="Contacts potentiels"
+                color="indigo"
+            />
+        </div>
+    );
+};
+
+export default React.memo(DashboardStats);

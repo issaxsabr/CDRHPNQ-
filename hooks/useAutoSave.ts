@@ -1,16 +1,30 @@
 
-import { useState, useEffect } from 'react';
-import { Project, BusinessData, ColumnLabelMap, FileSystemDirectoryHandle } from '../types';
+
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { Project, BusinessData, ColumnLabelMap, FileSystemDirectoryHandle, ToastMessage } from '../types';
 import { projectService, fileSystemService } from '../services/storage';
 import { getInteractiveHTMLContent, createExcelWorkbook } from '../utils/exportUtils';
 import { write } from 'xlsx';
+import { CONFIG } from '../config';
 
-const AUTO_SAVE_INTERVAL_MS = 5 * 60 * 1000; // 5 Minutes
+type AddToastFn = (toast: Omit<ToastMessage, 'id'>) => void;
 
-export const useAutoSave = (activeProjectId: string | null, projects: Project[], columnLabels: ColumnLabelMap) => {
+export const useAutoSave = (
+    activeProjectId: string | null, 
+    projects: Project[], 
+    columnLabels: ColumnLabelMap,
+    addToast: AddToastFn
+) => {
     const [dirHandle, setDirHandle] = useState<FileSystemDirectoryHandle | null>(null);
     const [hasStoredHandle, setHasStoredHandle] = useState(false);
     const [lastAutoSave, setLastAutoSave] = useState<number | null>(null);
+
+    // Refs for stable callbacks
+    const projectsRef = useRef(projects);
+    useEffect(() => { projectsRef.current = projects; }, [projects]);
+    
+    const columnLabelsRef = useRef(columnLabels);
+    useEffect(() => { columnLabelsRef.current = columnLabels; }, [columnLabels]);
 
     useEffect(() => {
         const checkProjectHandle = async () => {
@@ -30,27 +44,26 @@ export const useAutoSave = (activeProjectId: string | null, projects: Project[],
         checkProjectHandle();
     }, [activeProjectId]);
 
-    const performAutoSave = async (handleToUse?: FileSystemDirectoryHandle) => {
+    const performAutoSave = useCallback(async (handleToUse?: FileSystemDirectoryHandle, silent = false) => {
         const handle = handleToUse || dirHandle;
         if (!handle || !activeProjectId) return false;
 
         try {
-            const project = projects.find(p => p.id === activeProjectId);
+            const project = projectsRef.current.find(p => p.id === activeProjectId);
             if (!project) return false;
             
             const data = await projectService.getProjectContent(activeProjectId);
-            if (data.length === 0) return true; // No data to save, but not an error
+            if (data.length === 0) return true; 
 
             const baseName = `AUTOSAVE_${project.name.replace(/\s+/g, '_')}`;
-
-            console.log("Exécution sauvegarde auto...");
+            if(!silent) console.log("Exécution sauvegarde auto...");
 
             const jsonHandle = await handle.getFileHandle(`${baseName}_DATA.json`, { create: true });
             const writableJson = await jsonHandle.createWritable();
             await writableJson.write(JSON.stringify(data, null, 2));
             await writableJson.close();
 
-            const wb = createExcelWorkbook(data, columnLabels);
+            const wb = createExcelWorkbook(data, columnLabelsRef.current);
             const excelBuffer = write(wb, { bookType: 'xlsx', type: 'array' });
             
             const xlsxHandle = await handle.getFileHandle(`${baseName}.xlsx`, { create: true });
@@ -58,34 +71,37 @@ export const useAutoSave = (activeProjectId: string | null, projects: Project[],
             await writableXlsx.write(excelBuffer);
             await writableXlsx.close();
 
-            const htmlContent = getInteractiveHTMLContent(data, project.name, columnLabels);
+            const htmlContent = getInteractiveHTMLContent(data, project.name, columnLabelsRef.current);
             const htmlHandle = await handle.getFileHandle(`${baseName}_APP.html`, { create: true });
             const writableHtml = await htmlHandle.createWritable();
             await writableHtml.write(htmlContent);
             await writableHtml.close();
 
             setLastAutoSave(Date.now());
-            console.log("Sauvegarde auto OK");
+            if(!silent) {
+                addToast({type: 'success', title: 'Sauvegarde Auto Réussie', message: `Dossier "${project.name}" sauvegardé localement.`});
+            }
             return true;
-        } catch (err) {
+        } catch (err: any) {
             console.error("Erreur lors de la sauvegarde auto:", err);
+            addToast({type: 'error', title: 'Échec Sauvegarde Auto', message: err.message || 'Vérifiez les permissions du dossier.'});
             if (dirHandle) setDirHandle(null);
             return false;
         }
-    };
+    }, [dirHandle, activeProjectId, addToast]);
 
     useEffect(() => {
         if (!dirHandle || !activeProjectId) return;
-        const intervalId = setInterval(() => performAutoSave(), AUTO_SAVE_INTERVAL_MS);
+        const intervalId = setInterval(() => performAutoSave(undefined, true), CONFIG.AUTO_SAVE_INTERVAL_MS);
         return () => clearInterval(intervalId);
-    }, [dirHandle, activeProjectId, projects, columnLabels]);
+    }, [dirHandle, activeProjectId, performAutoSave]);
 
-    const restoreFolderConnection = async () => {
+    const restoreFolderConnection = useCallback(async () => {
         if (!activeProjectId) return;
         try {
             const handle = await fileSystemService.getHandle(activeProjectId);
             if (!handle) {
-                alert("Aucun dossier mémorisé pour ce projet.");
+                addToast({type: 'info', title: 'Aucun Dossier Mémorisé', message: 'Veuillez reconnecter manuellement le dossier.'});
                 setHasStoredHandle(false);
                 return;
             }
@@ -94,23 +110,23 @@ export const useAutoSave = (activeProjectId: string | null, projects: Project[],
                 setDirHandle(handle);
                 await performAutoSave(handle);
             } else {
-                alert("Permission refusée. Veuillez reconnecter manuellement.");
+                addToast({type: 'error', title: 'Permission Refusée', message: 'La sauvegarde automatique est désactivée.'});
             }
-        } catch (e) {
+        } catch (e: any) {
             console.error("Erreur restauration dossier:", e);
-            alert("Impossible de restaurer le dossier. Veuillez reconnecter.");
+            addToast({type: 'error', title: 'Erreur de Restauration', message: e.message || 'Impossible de se reconnecter au dossier.'});
         }
-    };
+    }, [activeProjectId, performAutoSave, addToast]);
     
-    const handleConnectLocalFolder = async () => {
+    const handleConnectLocalFolder = useCallback(async () => {
         if (!activeProjectId) {
-            alert("Veuillez sélectionner un dossier (projet) d'abord.");
+            addToast({type: 'info', title: 'Aucun Dossier Actif', message: 'Veuillez sélectionner un dossier avant de le lier.'});
             return;
         }
         try {
             const handle = await window.showDirectoryPicker();
             if ((await handle.requestPermission({ mode: 'readwrite' })) !== 'granted') {
-                alert("Permission refusée. La sauvegarde auto ne fonctionnera pas.");
+                addToast({type: 'error', title: 'Permission Refusée', message: 'La sauvegarde automatique ne fonctionnera pas.'});
                 return;
             }
             setDirHandle(handle);
@@ -118,13 +134,15 @@ export const useAutoSave = (activeProjectId: string | null, projects: Project[],
             setHasStoredHandle(true);
             await performAutoSave(handle);
         } catch (err: any) {
-            console.error("Annulé ou erreur:", err);
             if (err.name === 'AbortError') return;
+            console.error("Erreur connexion dossier:", err);
             if (err.message && err.message.includes('Cross origin sub frames')) {
-                alert("⚠️ Fonctionnalité bloquée par l'aperçu\n\nSolution : Ouvrez l'application en plein écran (Nouvel onglet) ou installez-la.");
+                 addToast({type: 'error', title: 'Fonctionnalité Bloquée', message: "Ouvrez l'application en plein écran pour utiliser cette fonction."});
+            } else {
+                 addToast({type: 'error', title: 'Erreur de Connexion', message: err.message || 'Impossible de lier le dossier.'});
             }
         }
-    };
+    }, [activeProjectId, performAutoSave, addToast]);
 
     return {
         dirHandle,

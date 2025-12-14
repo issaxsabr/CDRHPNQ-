@@ -1,9 +1,10 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { BusinessData, ContactPerson, ColumnLabelMap } from '../types';
-import { CheckCircle, XCircle, Clock, Phone, MapPin, AlertTriangle, Globe, Tag, MapIcon, Mail, Facebook, Linkedin, Instagram, Check, Plus, User, Copy, Edit2, Building2, PenTool } from 'lucide-react';
+import { Clock, Phone, MapPin, Globe, Tag, MapIcon, Mail, Facebook, Linkedin, Check, Plus, User, Copy, Edit2, Building2, PenTool } from 'lucide-react';
 import { FixedSizeList as List } from 'react-window';
 import AutoSizer from 'react-virtualized-auto-sizer';
+import StatusBadge from './StatusBadge';
 
 interface ResultTableProps {
   data: BusinessData[];
@@ -95,22 +96,6 @@ const ResultTable: React.FC<ResultTableProps> = ({ data, onUpdate, columnLabels 
       setTimeout(() => setCopiedId(null), 1500);
   };
 
-  const getStatusColor = (status: string) => {
-    const s = status?.toLowerCase() || "";
-    if (s.includes('définitiv') || s.includes('permanent')) return "text-rose-600 bg-rose-50 border-rose-100";
-    if (s.includes('ferm')) return "text-amber-600 bg-amber-50 border-amber-100";
-    if (s.includes('activ') || s.includes('ouvert') || s.includes('web')) return "text-emerald-700 bg-emerald-50 border-emerald-100";
-    return "text-slate-500 bg-slate-50 border-slate-100";
-  };
-
-  const getStatusIcon = (status: string) => {
-    const s = status?.toLowerCase() || "";
-    if (s.includes('définitiv') || s.includes('permanent')) return <XCircle className="w-3 h-3" />;
-    if (s.includes('ferm')) return <AlertTriangle className="w-3 h-3" />;
-    if (s.includes('activ') || s.includes('ouvert') || s.includes('web')) return <CheckCircle className="w-3 h-3" />;
-    return <AlertTriangle className="w-3 h-3" />;
-  };
-
   const getLabelForEmail = (email: string, decisionMakers?: ContactPerson[]) => {
       if (!decisionMakers || decisionMakers.length === 0) return email;
       const maker = decisionMakers.find(dm => dm.email && dm.email.toLowerCase() === email.toLowerCase());
@@ -146,7 +131,7 @@ const ResultTable: React.FC<ResultTableProps> = ({ data, onUpdate, columnLabels 
             display: 'grid',
             gridTemplateColumns
         }} 
-        className="items-center border-b border-slate-100 transition-colors hover:bg-slate-50 hover:z-50 group text-sm text-slate-700 relative bg-white"
+        className="items-center border-b border-slate-100 transition-colors hover:bg-slate-50 hover:z-50 group text-sm text-slate-700 relative bg-white table-row-stable"
       >
         {/* 1. Entreprise */}
         <div className="px-4 py-2 flex flex-col gap-1 h-full justify-center relative border-r border-transparent group-hover:border-slate-100">
@@ -185,10 +170,7 @@ const ResultTable: React.FC<ResultTableProps> = ({ data, onUpdate, columnLabels 
 
         {/* 2. Statut API */}
         <div className="px-3 py-2 flex flex-col items-start justify-center gap-1.5 h-full relative border-r border-transparent group-hover:border-slate-100">
-            <div className={`flex items-center gap-1.5 py-0.5 px-2 rounded-md text-[10px] font-medium border ${getStatusColor(item.status)} max-w-full shadow-sm`}>
-                <span className="shrink-0">{getStatusIcon(item.status)}</span>
-                <span className="truncate" title={item.status}>{item.status}</span>
-            </div>
+            <StatusBadge status={item.status} />
         </div>
 
         {/* 3. CUSTOM FIELD */}
@@ -247,6 +229,7 @@ const ResultTable: React.FC<ResultTableProps> = ({ data, onUpdate, columnLabels 
                     {primaryPhone && (
                         <button 
                             onClick={() => copyToClipboard(primaryPhone, `${rowId}-phone`)}
+                            aria-label="Copier le numéro de téléphone principal"
                             className="p-1 text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 rounded opacity-0 group-hover/phone:opacity-100 transition-opacity"
                             title="Copier"
                         >
@@ -257,19 +240,20 @@ const ResultTable: React.FC<ResultTableProps> = ({ data, onUpdate, columnLabels 
 
                 {secondaryPhones.length > 0 && (
                     <div className="relative group/dropdown ml-4">
-                        <div className="flex items-center gap-1 px-1.5 py-0.5 text-[10px] bg-slate-100 text-slate-500 hover:text-slate-900 border border-slate-200 rounded cursor-pointer w-fit transition-colors">
+                        <button aria-label="Afficher les numéros de téléphone secondaires" className="flex items-center gap-1 px-1.5 py-0.5 text-[10px] bg-slate-100 text-slate-500 hover:text-slate-900 border border-slate-200 rounded cursor-pointer w-fit transition-colors">
                             <Plus className="w-2.5 h-2.5" />
                             <span>{secondaryPhones.length}</span>
-                        </div>
+                        </button>
                         <div className="absolute top-full left-0 mt-1 w-48 bg-white border border-slate-200 rounded-lg shadow-xl p-1 opacity-0 invisible group-hover/dropdown:opacity-100 group-hover/dropdown:visible transition-all z-[60]">
                             {secondaryPhones.map((ph, idx) => (
                                 <button
                                     key={idx}
                                     onClick={(e) => { e.stopPropagation(); copyToClipboard(ph, `${rowId}-phone-${idx+1}`); }}
+                                    aria-label={`Copier le numéro de téléphone ${ph}`}
                                     className="w-full flex items-center justify-between px-2 py-1.5 text-[11px] text-slate-700 hover:bg-slate-50 rounded cursor-pointer font-mono"
                                 >
                                     {ph}
-                                    {copiedId === `${rowId}-phone-${idx+1}` && <Check className="w-3 h-3 text-emerald-500" />}
+                                    {copiedId === `${rowId}-phone-${idx+1}` ? <Check className="w-3 h-3 text-emerald-500" /> : null}
                                 </button>
                             ))}
                         </div>
@@ -318,6 +302,7 @@ const ResultTable: React.FC<ResultTableProps> = ({ data, onUpdate, columnLabels 
                      {primaryEmail && (
                         <button 
                             onClick={() => copyToClipboard(primaryEmail, `${rowId}-email`)}
+                            aria-label="Copier l'adresse email principale"
                             className="p-1 text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 rounded opacity-0 group-hover/email:opacity-100 transition-opacity"
                             title="Copier"
                         >
@@ -328,10 +313,10 @@ const ResultTable: React.FC<ResultTableProps> = ({ data, onUpdate, columnLabels 
 
                 {secondaryEmails.length > 0 && (
                         <div className="relative group/dropdown ml-5">
-                            <div className="flex items-center gap-1 px-1.5 py-0.5 text-[10px] bg-slate-100 text-slate-500 hover:text-slate-900 border border-slate-200 rounded cursor-pointer w-fit transition-colors">
+                            <button aria-label="Afficher les adresses email secondaires" className="flex items-center gap-1 px-1.5 py-0.5 text-[10px] bg-slate-100 text-slate-500 hover:text-slate-900 border border-slate-200 rounded cursor-pointer w-fit transition-colors">
                                 <Plus className="w-2.5 h-2.5" />
                                 <span>{secondaryEmails.length}</span>
-                            </div>
+                            </button>
 
                             <div className="absolute top-full left-0 mt-1 w-72 bg-white border border-slate-200 rounded-lg shadow-xl p-1 opacity-0 invisible group-hover/dropdown:opacity-100 group-hover/dropdown:visible transition-all z-[60]">
                                 <div className="text-[10px] font-semibold text-slate-400 px-2 py-1 uppercase tracking-wider bg-slate-50 rounded-t">Autres emails</div>
@@ -339,10 +324,11 @@ const ResultTable: React.FC<ResultTableProps> = ({ data, onUpdate, columnLabels 
                                     <button
                                         key={idx}
                                         onClick={(e) => { e.stopPropagation(); copyToClipboard(em, `${rowId}-email-list-${idx}`); }}
+                                        aria-label={`Copier l'adresse email ${em}`}
                                         className="w-full flex items-center justify-between px-2 py-1.5 text-[11px] text-slate-700 hover:bg-slate-50 rounded cursor-pointer truncate font-mono"
                                     >
                                         <span className="truncate">{getLabelForEmail(em, item.decisionMakers)}</span>
-                                        {copiedId === `${rowId}-email-list-${idx}` && <Check className="w-3 h-3 text-emerald-500 shrink-0 ml-2" />}
+                                        {copiedId === `${rowId}-email-list-${idx}` ? <Check className="w-3 h-3 text-emerald-500 shrink-0 ml-2" /> : null}
                                     </button>
                                 ))}
                             </div>
@@ -352,8 +338,8 @@ const ResultTable: React.FC<ResultTableProps> = ({ data, onUpdate, columnLabels 
 
             {item.socials && Object.keys(item.socials).length > 0 && (
                 <div className="flex items-center gap-1 flex-wrap mt-0.5">
-                    {item.socials.facebook && <a href={item.socials.facebook.startsWith('http') ? item.socials.facebook : `https://${item.socials.facebook}`} target="_blank" rel="noopener noreferrer" className="text-slate-300 hover:text-[#1877F2] transition-colors"><Facebook className="w-3 h-3" /></a>}
-                    {item.socials.linkedin && <a href={item.socials.linkedin.startsWith('http') ? item.socials.linkedin : `https://${item.socials.linkedin}`} target="_blank" rel="noopener noreferrer" className="text-slate-300 hover:text-[#0A66C2] transition-colors"><Linkedin className="w-3 h-3" /></a>}
+                    {item.socials.facebook && <a href={item.socials.facebook.startsWith('http') ? item.socials.facebook : `https://${item.socials.facebook}`} target="_blank" rel="noopener noreferrer" aria-label="Visiter la page Facebook" className="text-slate-300 hover:text-[#1877F2] transition-colors"><Facebook className="w-3 h-3" /></a>}
+                    {item.socials.linkedin && <a href={item.socials.linkedin.startsWith('http') ? item.socials.linkedin : `https://${item.socials.linkedin}`} target="_blank" rel="noopener noreferrer" aria-label="Visiter le profil LinkedIn" className="text-slate-300 hover:text-[#0A66C2] transition-colors"><Linkedin className="w-3 h-3" /></a>}
                 </div>
             )}
         </div>
@@ -361,13 +347,13 @@ const ResultTable: React.FC<ResultTableProps> = ({ data, onUpdate, columnLabels 
         {/* 9. Actions */}
         <div className="px-4 py-2 text-right h-full overflow-hidden flex flex-col justify-center items-end gap-1.5">
             {item.website && (
-            <a href={item.website} target="_blank" rel="noopener noreferrer" className="w-full inline-flex items-center justify-center gap-1.5 text-slate-600 bg-white hover:bg-slate-50 px-2.5 py-1 rounded-md transition-all border border-slate-200 hover:border-slate-300 text-[10px] font-medium shadow-sm">
+            <a href={item.website} target="_blank" rel="noopener noreferrer" className="w-full inline-flex items-center justify-center gap-1.5 text-slate-600 bg-white hover:bg-slate-50 px-2.5 py-1 rounded-md border border-slate-200 text-[10px] font-medium shadow-sm hover-lift">
                 <Globe className="w-3 h-3 shrink-0 text-slate-400" /> Web
             </a>
             )}
             
             {item.sourceUri ? (
-            <a href={item.sourceUri} target="_blank" rel="noopener noreferrer" className="w-full inline-flex items-center justify-center gap-1.5 text-white bg-slate-800 hover:bg-slate-900 px-2.5 py-1 rounded-md transition-all shadow-sm text-[10px] font-medium">
+            <a href={item.sourceUri} target="_blank" rel="noopener noreferrer" className="w-full inline-flex items-center justify-center gap-1.5 text-white bg-slate-800 hover:bg-slate-900 px-2.5 py-1 rounded-md shadow-sm text-[10px] font-medium hover-lift">
                 <MapIcon className="w-3 h-3 shrink-0 text-slate-400" /> Maps
             </a>
             ) : null}
@@ -377,7 +363,7 @@ const ResultTable: React.FC<ResultTableProps> = ({ data, onUpdate, columnLabels 
   };
 
   return (
-    <div className="w-full overflow-hidden rounded-xl border border-slate-200 shadow-xl shadow-slate-200/50 bg-white flex flex-col h-[650px] animate-in fade-in slide-in-from-bottom-8 duration-700">
+    <div className="w-full overflow-hidden rounded-xl border border-slate-200 shadow-xl shadow-slate-200/50 bg-white flex flex-col h-[650px] animate-fade-in-up">
         <div className="flex-1 flex flex-col overflow-x-auto">
             <div style={{ minWidth: 1400 }} className="flex flex-col h-full">
                 {/* HEADER */}
@@ -416,4 +402,4 @@ const ResultTable: React.FC<ResultTableProps> = ({ data, onUpdate, columnLabels 
   );
 };
 
-export default ResultTable;
+export default React.memo(ResultTable);

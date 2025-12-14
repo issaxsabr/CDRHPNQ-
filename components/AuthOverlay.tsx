@@ -113,14 +113,14 @@ const AuthOverlay: React.FC<AuthOverlayProps> = ({ onLoginSuccess }) => {
     };
 
     return (
-        <div className="fixed inset-0 z-[100] bg-slate-900/80 backdrop-blur-md flex items-center justify-center p-4">
-            <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden animate-in zoom-in-95 duration-300">
+        <div className="fixed inset-0 z-[100] bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden animate-scale-in glass">
                 {/* Header */}
-                <div className="bg-slate-50 border-b border-slate-100 p-6 flex flex-col items-center text-center">
+                <div className="bg-slate-50/50 border-b border-slate-100 p-6 flex flex-col items-center text-center">
                     <div className="w-12 h-12 bg-indigo-100 text-indigo-600 rounded-xl flex items-center justify-center mb-3 shadow-inner">
                         {step === 'email' ? <Lock className="w-6 h-6" /> : <ShieldCheck className="w-6 h-6" />}
                     </div>
-                    <h2 className="text-xl font-bold text-slate-800">
+                    <h2 className="text-xl font-bold text-slate-800 gradient-text">
                         {step === 'email' ? 'Espace de Connexion' : 'Vérification OTP'}
                     </h2>
                     <p className="text-sm text-slate-500 mt-1">
@@ -153,7 +153,7 @@ const AuthOverlay: React.FC<AuthOverlayProps> = ({ onLoginSuccess }) => {
                                         autoFocus
                                         value={email}
                                         onChange={(e) => setEmail(e.target.value)}
-                                        className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 transition-all text-slate-800 text-sm font-medium placeholder-slate-400"
+                                        className="w-full pl-10 pr-4 py-2.5 bg-slate-50/50 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 transition-all text-slate-800 text-sm font-medium placeholder-slate-400"
                                         placeholder="nom@entreprise.com"
                                     />
                                 </div>
@@ -161,7 +161,7 @@ const AuthOverlay: React.FC<AuthOverlayProps> = ({ onLoginSuccess }) => {
                             <button 
                                 type="submit" 
                                 disabled={loading}
-                                className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2.5 rounded-lg shadow-md hover:shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2 disabled:bg-slate-300 disabled:cursor-not-allowed"
+                                className="w-full bg-indigo-600 text-white font-semibold py-2.5 rounded-lg transition-all flex items-center justify-center gap-2 disabled:bg-slate-300 disabled:cursor-not-allowed btn-modern"
                             >
                                 {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <>Recevoir le code <ArrowRight className="w-4 h-4" /></>}
                             </button>
@@ -180,7 +180,7 @@ const AuthOverlay: React.FC<AuthOverlayProps> = ({ onLoginSuccess }) => {
                                     maxLength={8}
                                     value={otp}
                                     onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
-                                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 transition-all text-slate-800 text-center text-2xl font-mono tracking-[0.2em] placeholder-slate-300"
+                                    className="w-full px-4 py-3 bg-slate-50/50 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-500 transition-all text-slate-800 text-center text-2xl font-mono tracking-[0.2em] placeholder-slate-300"
                                     placeholder="000000"
                                 />
                                 <p className="text-[10px] text-center text-slate-400">Vérifiez vos spams si vous ne recevez rien.</p>
@@ -188,7 +188,7 @@ const AuthOverlay: React.FC<AuthOverlayProps> = ({ onLoginSuccess }) => {
                             <button 
                                 type="submit" 
                                 disabled={loading || otp.length < 6}
-                                className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2.5 rounded-lg shadow-md hover:shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2 disabled:bg-slate-300 disabled:cursor-not-allowed"
+                                className="w-full bg-indigo-600 text-white font-semibold py-2.5 rounded-lg transition-all flex items-center justify-center gap-2 disabled:bg-slate-300 disabled:cursor-not-allowed btn-modern"
                             >
                                 {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Confirmer le code'}
                             </button>
@@ -204,7 +204,7 @@ const AuthOverlay: React.FC<AuthOverlayProps> = ({ onLoginSuccess }) => {
                 </div>
                 
                 {/* Footer */}
-                <div className="bg-slate-50 p-4 border-t border-slate-100 text-center">
+                <div className="bg-slate-50/50 p-4 border-t border-slate-100 text-center">
                     <p className="text-[10px] text-slate-400">
                         Accès sécurisé et restreint.
                     </p>

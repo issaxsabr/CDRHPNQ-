@@ -164,7 +164,7 @@ const SearchBar: React.FC<SearchBarProps> = ({
   const quotaColor = quotaPercent > 90 ? 'bg-rose-500' : quotaPercent > 70 ? 'bg-amber-500' : 'bg-indigo-600';
 
   return (
-    <div className="w-full max-w-4xl mx-auto mb-10 relative z-10">
+    <div className="w-full max-w-4xl mx-auto mb-10 relative z-10 animate-scale-in">
       {/* Top Tabs & Settings Toggle */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4 sm:gap-0">
         <div className="flex items-center gap-2">
@@ -202,7 +202,7 @@ const SearchBar: React.FC<SearchBarProps> = ({
              {/* Project Selector - NOUVEAU DESIGN */}
              <div className="relative group w-full sm:w-[260px] h-10">
                  {isCreatingProject ? (
-                     <div className="absolute inset-0 flex items-center bg-white rounded-lg border-2 border-indigo-500 shadow-md animate-in zoom-in-95 duration-200 z-20">
+                     <div className="absolute inset-0 flex items-center bg-white rounded-lg border-2 border-indigo-500 shadow-md animate-scale-in z-20">
                          <div className="pl-3 pr-2 text-indigo-500"><FolderPlus className="w-4 h-4"/></div>
                          <input 
                             autoFocus
@@ -272,6 +272,7 @@ const SearchBar: React.FC<SearchBarProps> = ({
 
             <button 
                 onClick={() => setShowSettings(!showSettings)}
+                aria-label="Ouvrir ou fermer les paramètres de recherche"
                 className={`group flex items-center justify-center w-10 h-10 rounded-lg transition-all duration-200 border ${
                     showSettings 
                     ? 'bg-slate-100 border-slate-300 text-slate-800 shadow-inner' 
@@ -286,7 +287,7 @@ const SearchBar: React.FC<SearchBarProps> = ({
 
       {/* Settings Panel */}
       {showSettings && (
-          <div className="mb-6 p-6 rounded-xl bg-white border border-slate-200 shadow-xl shadow-slate-200/50 animate-in slide-in-from-top-4 fade-in duration-300">
+          <div className="mb-6 p-6 rounded-xl bg-white border border-slate-200 shadow-xl shadow-slate-200/50 animate-fade-in-up">
               <div className="flex items-center justify-between mb-6">
                  <h3 className="text-sm font-semibold text-slate-900 flex items-center gap-2">
                   <Command className="w-4 h-4 text-indigo-500" />
@@ -418,6 +419,7 @@ const SearchBar: React.FC<SearchBarProps> = ({
                 <button
                     type="button"
                     onClick={() => setUseLocation(!useLocation)}
+                    aria-label="Activer ou désactiver l'utilisation de la géolocalisation"
                     className={`flex items-center justify-center px-3 mx-2 rounded-lg transition-all ${
                         useLocation 
                         ? 'text-indigo-600 bg-indigo-50' 
@@ -431,11 +433,12 @@ const SearchBar: React.FC<SearchBarProps> = ({
                 <div className="pr-2">
                     <button
                     type="submit"
+                    aria-label="Lancer la recherche"
                     disabled={isLoading || !query.trim()}
-                    className={`px-6 py-2.5 rounded-lg text-sm font-semibold text-white shadow-sm transition-all transform active:scale-95 flex items-center gap-2 min-w-[130px] justify-center ${
+                    className={`px-6 py-2.5 rounded-lg text-sm font-semibold text-white btn-modern bg-indigo-600 flex items-center gap-2 min-w-[130px] justify-center ${
                         isLoading || !query.trim()
                         ? 'bg-slate-300 cursor-not-allowed'
-                        : 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-200' 
+                        : '' 
                     }`}
                     >
                     {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Rechercher'}
@@ -462,10 +465,10 @@ const SearchBar: React.FC<SearchBarProps> = ({
                                 key={s.id}
                                 type="button"
                                 onClick={() => setStrategy(s.id as SerperStrategy)}
-                                className={`relative flex flex-col items-start p-3 rounded-lg border text-left transition-all ${
+                                className={`relative flex flex-col items-start p-3 rounded-lg border text-left card-hover ${
                                     strategy === s.id 
                                     ? 'bg-indigo-50/50 border-indigo-200 shadow-sm ring-1 ring-indigo-100' 
-                                    : 'bg-white border-slate-100 hover:border-slate-300 hover:bg-slate-50'
+                                    : 'bg-white border-slate-100'
                                 }`}
                             >
                                 <div className="flex items-center justify-between w-full mb-1">
@@ -589,10 +592,10 @@ const SearchBar: React.FC<SearchBarProps> = ({
                                key={s.id}
                                type="button"
                                onClick={() => setStrategy(s.id as SerperStrategy)}
-                               className={`relative flex flex-col items-start p-3 rounded-lg border text-left transition-all ${
+                               className={`relative flex flex-col items-start p-3 rounded-lg border text-left card-hover ${
                                    strategy === s.id 
                                    ? 'bg-white border-indigo-500 shadow-sm ring-1 ring-indigo-500/20' 
-                                   : 'bg-slate-100/50 border-slate-200 hover:bg-white hover:border-slate-300'
+                                   : 'bg-slate-100/50 border-slate-200'
                                }`}
                            >
                                <div className="flex items-center justify-between w-full mb-1">
@@ -629,10 +632,10 @@ const SearchBar: React.FC<SearchBarProps> = ({
                     <button
                         type="submit"
                         disabled={isLoading || !query.trim()}
-                        className={`px-6 py-2.5 text-sm font-semibold text-white rounded-lg shadow-md transition-all transform active:scale-95 flex items-center gap-2 ${
+                        className={`px-6 py-2.5 text-sm font-semibold text-white rounded-lg btn-modern flex items-center gap-2 ${
                             isLoading || !query.trim()
                             ? 'bg-slate-300 cursor-not-allowed'
-                            : 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-200'
+                            : 'bg-indigo-600'
                         }`}
                     >
                         {isLoading ? (
@@ -653,4 +656,4 @@ const SearchBar: React.FC<SearchBarProps> = ({
   );
 };
 
-export default SearchBar;
+export default React.memo(SearchBar);

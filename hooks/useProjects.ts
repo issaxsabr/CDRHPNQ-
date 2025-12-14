@@ -1,5 +1,6 @@
-// FIX: Add default import for 'React' to use types like React.MouseEvent
-import React, { useState, useEffect } from 'react';
+
+
+import React, { useState, useEffect, useCallback } from 'react';
 import { Project, BusinessData } from '../types';
 import { projectService } from '../services/storage';
 
@@ -7,27 +8,27 @@ export const useProjects = () => {
     const [projects, setProjects] = useState<Project[]>([]);
     const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
 
-    const loadProjects = async () => {
+    const loadProjects = useCallback(async () => {
         try {
             const all = await projectService.getAllProjects();
             setProjects(all);
         } catch (e) {
             console.error("Failed to load projects", e);
         }
-    };
+    }, []);
 
     useEffect(() => {
         loadProjects();
-    }, []);
+    }, [loadProjects]);
 
-    const handleCreateProject = async (name: string, autoExportFormats?: ('xlsx' | 'json' | 'html')[]) => {
+    const handleCreateProject = useCallback(async (name: string, autoExportFormats?: ('xlsx' | 'json' | 'html')[]) => {
         const newProj = await projectService.createProject(name, autoExportFormats);
         await loadProjects();
         setActiveProjectId(newProj.id);
         return newProj;
-    };
+    }, [loadProjects]);
 
-    const handleDeleteProject = async (id: string, e: React.MouseEvent) => {
+    const handleDeleteProject = useCallback(async (id: string, e: React.MouseEvent) => {
         e.stopPropagation();
         if(window.confirm("Supprimer ce dossier et toutes ses données ?")) {
             await projectService.deleteProject(id);
@@ -35,12 +36,12 @@ export const useProjects = () => {
                 setActiveProjectId(null);
             }
             await loadProjects();
-            return true; // Indiquer la suppression
+            return true;
         }
         return false;
-    };
+    }, [activeProjectId, loadProjects]);
 
-    const handleSelectProject = async (id: string | null): Promise<BusinessData[] | null> => {
+    const handleSelectProject = useCallback(async (id: string | null): Promise<BusinessData[] | null> => {
         setActiveProjectId(id);
         if (id) {
             try {
@@ -51,7 +52,7 @@ export const useProjects = () => {
             }
         }
         return null;
-    };
+    }, []);
 
     return {
         projects,

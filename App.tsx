@@ -1,14 +1,13 @@
 
-import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { Info, StopCircle, Clock, Zap, Sparkles, Filter, Check, PlayCircle, X, FileJson, AlertOctagon, RotateCw, HardDrive, TableProperties, FileCode, FileSpreadsheet, Loader2 } from 'lucide-react';
+import React, { useState, useCallback, useEffect, useMemo, lazy, Suspense } from 'react';
+import { Session } from '@supabase/supabase-js';
+import { Info, StopCircle, Clock, Zap, Sparkles, Filter, Check, PlayCircle, X, FileJson, AlertOctagon, RotateCw, HardDrive, TableProperties, FileCode, FileSpreadsheet, Loader2, AlertTriangle } from 'lucide-react';
 import SearchBar from './components/SearchBar';
 import ResultTable from './components/ResultTable';
 import AuthOverlay from './components/AuthOverlay';
 import Header from './components/Header';
 import DashboardStats from './components/DashboardStats';
-import ProjectModal from './components/modals/ProjectModal';
-import ColumnConfigModal from './components/modals/ColumnConfigModal';
-import CacheModal from './components/modals/CacheModal';
+import { ToastProvider, useToast } from './contexts/ToastContext';
 
 import { supabase } from './services/supabase';
 import { extractDataFromContext, enrichWithGemini } from './services/gemini';
@@ -16,23 +15,21 @@ import { searchWithSerper } from './services/serper';
 import { cacheService, projectService, blacklistService, globalIndexService } from './services/storage';
 import { BusinessData, ScraperState, ScraperProvider, CountryCode, SavedSession, SerperStrategy, Project, ColumnLabelMap } from './types';
 import { getInteractiveHTMLContent, createExcelWorkbook, exportToExcel } from './utils/exportUtils';
+import { CONFIG } from './config';
 
 // Hooks
 import { useProjects } from './hooks/useProjects';
 import { useAutoSave } from './hooks/useAutoSave';
 import { useQuota } from './hooks/useQuota';
+import { TimelineStep } from './components/Timeline';
 
+// Lazy load modals for code splitting
+const ProjectModal = lazy(() => import('./components/modals/ProjectModal'));
+const ColumnConfigModal = lazy(() => import('./components/modals/ColumnConfigModal'));
+const CacheModal = lazy(() => import('./components/modals/CacheModal'));
+const LoadingScreen = lazy(() => import('./components/LoadingScreen'));
+const BatchProgress = lazy(() => import('./components/BatchProgress'));
 
-const SESSION_KEY = 'mapscraper_active_session_v1';
-const BATCH_CONCURRENCY = 3; // Nombre de requêtes en parallèle (Mode Turbo)
-const BATCH_DELAY_MS = 1000; // Délai entre chaque lot pour éviter le rate-limit
-
-// COÛTS SERPER
-const COSTS = {
-    web_basic: 1,
-    maps_basic: 3,
-    maps_web_enrich: 4
-};
 
 const DEFAULT_LABELS: ColumnLabelMap = {
     name: "Entreprise",
@@ -80,7 +77,8 @@ const mergeNewResults = (currentResults: BusinessData[], newResults: BusinessDat
   return updatedList;
 };
 
-const App: React.FC = () => {
+const AppContent: React.FC = () => {
+  const { addToast } = useToast();
   const [state, setState] = useState<ScraperState>({
     isLoading: false,
     isBatchMode: false,
@@ -89,9 +87,11 @@ const App: React.FC = () => {
     error: null,
     rawText: null,
   });
+  
+  const [timelineSteps, setTimelineSteps] = useState<TimelineStep[]>([]);
 
-  // Auth State
-  const [session, setSession] = useState<any>(null);
+  // Auth State (FIX: Replaced 'any' with Supabase 'Session' type)
+  const [session, setSession] = useState<Session | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
 
   // Column Customization
@@ -101,8 +101,7 @@ const App: React.FC = () => {
   // Custom Hooks
   const { quotaLimit, quotaUsed, updateQuotaUsed, handleUpdateQuotaLimit, handleResetQuota } = useQuota(5000);
   const { projects, activeProjectId, setActiveProjectId, loadProjects, handleCreateProject, handleDeleteProject, handleSelectProject } = useProjects();
-  const { dirHandle, setDirHandle, hasStoredHandle, lastAutoSave, performAutoSave, restoreFolderConnection, handleConnectLocalFolder } = useAutoSave(activeProjectId, projects, columnLabels);
-
+  const { dirHandle, setDirHandle, hasStoredHandle, lastAutoSave, performAutoSave, restoreFolderConnection, handleConnectLocalFolder } = useAutoSave(activeProjectId, projects, columnLabels, addToast);
 
   // Project Management
   const [showProjectModal, setShowProjectModal] = useState(false);
@@ -124,7 +123,6 @@ const App: React.FC = () => {
   });
 
   useEffect(() => {
-    // 1. Initial Data Load
     checkActiveSession();
     refreshHistoryCount();
     
@@ -135,7 +133,6 @@ const App: React.FC = () => {
         } catch(e) { console.error("Failed to parse column labels from localStorage", e); }
     }
 
-    // 2. Auth Check
     supabase.auth.getSession().then(({ data: { session } }) => {
         setSession(session);
         setAuthLoading(false);
@@ -159,7 +156,7 @@ const App: React.FC = () => {
       localStorage.setItem('mapscraper_column_labels', JSON.stringify(newLabels));
   };
   
-  const selectProjectAndLoadContent = async (id: string | null) => {
+  const selectProjectAndLoadContent = useCallback(async (id: string | null) => {
       const content = await handleSelectProject(id);
       if (content) {
           setState(prev => ({
@@ -172,24 +169,24 @@ const App: React.FC = () => {
       } else if (id === null) {
           setState(prev => ({ ...prev, results: [] }));
       }
-  };
+  }, [handleSelectProject]);
 
-  const generateInteractiveHTML = (data: BusinessData[], projectName: string) => {
+  const generateInteractiveHTML = useCallback((data: BusinessData[], projectName: string) => {
       const htmlContent = getInteractiveHTMLContent(data, projectName, columnLabels);
       const blob = new Blob([htmlContent], { type: 'text/html' });
       const link = document.createElement('a');
       link.href = URL.createObjectURL(blob);
       link.download = `app_${projectName.replace(/\s+/g, '_')}.html`;
       link.click();
-  };
+      addToast({type: 'success', title: "HTML App Exportée", message: "Le fichier interactif a été téléchargé."});
+  }, [columnLabels, addToast]);
 
-  // --- EXPORT LOGIC ---
-  const handleExportProject = async (e: React.MouseEvent, project: Project, type: 'xlsx' | 'json' | 'html') => {
+  const handleExportProject = useCallback(async (e: React.MouseEvent, project: Project, type: 'xlsx' | 'json' | 'html') => {
     e.stopPropagation(); 
     try {
         const data = await projectService.getProjectContent(project.id);
         if (!data || data.length === 0) {
-            alert("Ce projet est vide.");
+            addToast({type: 'info', title: 'Dossier Vide', message: `Le dossier "${project.name}" ne contient aucune donnée à exporter.`});
             return;
         }
 
@@ -206,22 +203,22 @@ const App: React.FC = () => {
             link.download = `${fileName}.json`;
             link.click();
         }
-
-    } catch (err) {
+        addToast({type: 'success', title: 'Exportation Réussie', message: `Le dossier "${project.name}" a été exporté en ${type.toUpperCase()}.`});
+    } catch (err: any) {
         console.error("Erreur lors de l'export du projet", err);
-        alert("Erreur lors de la génération du fichier.");
+        addToast({type: 'error', title: "Erreur d'Exportation", message: err.message || "Impossible de générer le fichier."});
     }
-  };
+  }, [columnLabels, generateInteractiveHTML, addToast]);
 
   const checkActiveSession = () => {
     try {
-      const saved = localStorage.getItem(SESSION_KEY);
+      const saved = localStorage.getItem(CONFIG.SESSION_KEY);
       if (saved) {
         const sessionData: SavedSession = JSON.parse(saved);
         if (sessionData.query && sessionData.results.length < sessionData.query.split('\n').filter(l => l.trim()).length) {
             setActiveSession(sessionData);
         } else {
-            localStorage.removeItem(SESSION_KEY);
+            localStorage.removeItem(CONFIG.SESSION_KEY);
         }
       }
     } catch (e) {
@@ -229,35 +226,7 @@ const App: React.FC = () => {
     }
   };
 
-  const resumeSession = () => {
-    if (!activeSession) return;
-    setState(prev => ({
-        ...prev,
-        results: activeSession.results,
-        progress: { current: activeSession.currentIndex, total: activeSession.query.split('\n').filter(l => l.trim()).length }
-    }));
-
-    handleSearch(
-        activeSession.query,
-        false,
-        true,
-        true,
-        activeSession.config.isPaidMode,
-        'serper_eco',
-        activeSession.config.serperKey,
-        activeSession.config.country,
-        activeSession.config.strategy,
-        activeSession.currentIndex
-    );
-    setActiveSession(null);
-  };
-
-  const discardSession = () => {
-    localStorage.removeItem(SESSION_KEY);
-    setActiveSession(null);
-  };
-
-  const saveSession = (query: string, currentIndex: number, results: BusinessData[], config: SavedSession['config']) => {
+  const saveSession = useCallback((query: string, currentIndex: number, results: BusinessData[], config: SavedSession['config']) => {
       try {
           const sessionData: SavedSession = {
               query,
@@ -266,16 +235,21 @@ const App: React.FC = () => {
               timestamp: Date.now(),
               config
           };
-          localStorage.setItem(SESSION_KEY, JSON.stringify(sessionData));
+          localStorage.setItem(CONFIG.SESSION_KEY, JSON.stringify(sessionData));
       } catch (e) {
           console.warn("Failed to save session", e);
       }
+  }, []);
+
+  const discardSession = () => {
+    localStorage.removeItem(CONFIG.SESSION_KEY);
+    setActiveSession(null);
   };
 
-  const refreshHistoryCount = async () => {
+  const refreshHistoryCount = useCallback(async () => {
     const count = await cacheService.count();
     setHistoryCount(count);
-  };
+  }, []);
 
   const openCacheModal = async () => {
     const items = await cacheService.getAll();
@@ -291,6 +265,7 @@ const App: React.FC = () => {
         setSelectedCacheKeys(new Set());
         await refreshHistoryCount();
         setShowCacheModal(false);
+        addToast({type: 'success', title: 'Cache Vierge', message: 'Toutes les données en cache ont été supprimées.'});
     }
   };
 
@@ -310,23 +285,18 @@ const App: React.FC = () => {
 
   const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
-  // Estimation du temps restant avec le mode parallèle
   const formatTimeLeft = (remainingItems: number) => {
-    // On estime : (Nb d'items / Concurrency) * (Delay + TempsMoyenRequete)
-    const batchesRemaining = Math.ceil(remainingItems / BATCH_CONCURRENCY);
-    const avgReqTime = 2000; // Estimation 2s par batch
-    const totalSeconds = Math.ceil((batchesRemaining * (BATCH_DELAY_MS + avgReqTime)) / 1000);
-    
+    const batchesRemaining = Math.ceil(remainingItems / CONFIG.BATCH_CONCURRENCY);
+    const avgReqTime = 2000;
+    const totalSeconds = Math.ceil((batchesRemaining * (CONFIG.BATCH_DELAY_MS + avgReqTime)) / 1000);
     if (totalSeconds < 60) return `${totalSeconds}s`;
     const minutes = Math.floor(totalSeconds / 60);
     return `${minutes}m ${totalSeconds % 60}s`;
   };
 
-  // Nouvelle fonction pour éditer les cellules
-  const handleUpdateResult = (index: number, field: keyof BusinessData, value: any) => {
+  const handleUpdateResult = useCallback((index: number, field: keyof BusinessData, value: any) => {
     setState(prev => {
         const newResults = [...prev.results];
-        // Gestion spéciale pour synchroniser les listes (emails/phones) avec le champ principal
         if (field === 'phone') {
              newResults[index] = { ...newResults[index], phone: value };
              const oldPhones = newResults[index].phones || [];
@@ -343,60 +313,42 @@ const App: React.FC = () => {
             newResults[index] = { ...newResults[index], [field]: value };
         }
 
-        // PERSISTENCE : Si on est dans un projet, on sauvegarde immédiatement
         if (activeProjectId) {
              projectService.updateProjectContent(activeProjectId, newResults);
         }
 
         return { ...prev, results: newResults };
     });
-  };
+  }, [activeProjectId]);
 
   const processSingleQuery = async (
-      query: string, 
-      provider: ScraperProvider, 
-      serperKey: string,
-      country: string,
-      strategy: SerperStrategy
+      query: string, provider: ScraperProvider, serperKey: string, country: string, strategy: SerperStrategy
   ): Promise<{ businesses: BusinessData[], rawText: string }> => {
       const serperData = await searchWithSerper(query, serperKey, country, strategy);
       const geminiEnrichmentData = await enrichWithGemini(serperData, query);
       return await extractDataFromContext(query, serperData, geminiEnrichmentData);
   };
-
+  
+  // OPTIMIZED: Dependency array minimized to prevent re-renders
   const handleSearch = useCallback(async (
-      query: string, 
-      useLocation: boolean, 
-      isBatch: boolean, 
-      isSafeMode: boolean, 
-      isPaidMode: boolean,
-      provider: ScraperProvider,
-      serperKey: string,
-      country: CountryCode,
-      strategy: SerperStrategy,
-      startIndex: number = 0
+      query: string, useLocation: boolean, isBatch: boolean, isSafeMode: boolean, isPaidMode: boolean,
+      provider: ScraperProvider, serperKey: string, country: CountryCode, strategy: SerperStrategy, startIndex: number = 0
   ) => {
     stopRef.current = false;
     setEstimatedTimeLeft(null);
     setActiveSession(null);
     setExportFilters({ excludeClosed: false, excludeNoPhone: false, excludeDuplicates: false, onlyWithEmail: false });
     
-    const costPerQuery = COSTS[strategy] || 3;
+    const costPerQuery = CONFIG.COSTS[strategy] || 3;
 
     if (!isBatch) {
-      // --- SINGLE MODE ---
       const cached = await cacheService.get(query);
       if (cached) {
           const newResult = { ...cached, status: cached.status + " (Cache)" };
           setState(prev => {
             if (stopRef.current) return prev; 
             const updated = mergeNewResults(prev.results, [newResult]);
-            return {
-                ...prev,
-                isLoading: false,
-                results: updated,
-                error: null
-            };
+            return { ...prev, isLoading: false, results: updated, error: null };
           });
           if (activeProjectId) {
               await projectService.addResultsToProject(activeProjectId, [newResult]);
@@ -410,15 +362,12 @@ const App: React.FC = () => {
       
       try {
         if (stopRef.current) return;
-        
         updateQuotaUsed(costPerQuery);
-
         const { businesses, rawText } = await processSingleQuery(query, provider, serperKey, country, strategy);
         if (stopRef.current) return;
 
         if (businesses.length > 0) {
             let item = businesses[0];
-            
             const blCheck = blacklistService.isBlacklisted(item);
             if (blCheck.isBlacklisted) {
                 item = { ...item, status: `Ignoré: ${blCheck.reason}`, email: undefined, phone: undefined };
@@ -429,9 +378,8 @@ const App: React.FC = () => {
                      item = { ...item, status: `Doublon (Dossier: ${projName})` };
                 }
             }
-
             await cacheService.set(query, item);
-            refreshHistoryCount();
+            await refreshHistoryCount();
             
             if (activeProjectId && !blCheck.isBlacklisted) {
                 await projectService.addResultsToProject(activeProjectId, [item]);
@@ -439,150 +387,161 @@ const App: React.FC = () => {
                 await performAutoSave();
             }
             
-            setState(prev => ({
-                ...prev,
-                isLoading: false,
-                results: mergeNewResults(prev.results, [item]),
-                rawText: rawText
-            }));
+            setState(prev => ({ ...prev, isLoading: false, results: mergeNewResults(prev.results, [item]), rawText: rawText }));
         } else {
              setState(prev => ({ ...prev, isLoading: false, results: prev.results, rawText: "Aucun résultat" }));
         }
 
       } catch (err: any) {
         if (stopRef.current) return;
-        setState(prev => ({
-          ...prev,
-          isLoading: false,
-          error: err.message || "Erreur lors de la récupération."
-        }));
+        const errorMessage = err.message || "Erreur lors de la récupération.";
+        setState(prev => ({ ...prev, isLoading: false, error: errorMessage }));
+        addToast({type: 'error', title: "Erreur de Recherche", message: errorMessage});
       }
 
     } else {
-      // --- TURBO BATCH MODE ---
       const lines = query.split('\n').map(l => l.trim()).filter(l => l.length > 0);
       if (lines.length === 0) return;
 
-      setState(prev => ({ 
-        ...prev, 
-        isLoading: true, 
-        isBatchMode: true,
-        progress: { current: startIndex, total: lines.length },
-        error: null, 
-        rawText: null 
-      }));
+      const initialSteps: TimelineStep[] = [
+        { title: "Préparation", description: `${lines.length} lignes à traiter.`, status: 'completed' },
+        { title: "Recherche & Analyse", description: "Lancement des requêtes...", status: 'active' },
+        { title: "Finalisation", description: "En attente...", status: 'pending' },
+      ];
+      setTimelineSteps(initialSteps);
+      setState(prev => ({ ...prev, isLoading: true, isBatchMode: true, progress: { current: startIndex, total: lines.length }, error: null, rawText: null }));
 
-      for (let i = startIndex; i < lines.length; i += BATCH_CONCURRENCY) {
+      for (let i = startIndex; i < lines.length; i += CONFIG.BATCH_CONCURRENCY) {
         if (stopRef.current) break;
         
-        const chunk = lines.slice(i, i + BATCH_CONCURRENCY);
+        const chunk = lines.slice(i, i + CONFIG.BATCH_CONCURRENCY);
         setEstimatedTimeLeft(formatTimeLeft(lines.length - i));
         
         const promises = chunk.map(async (line) => {
             const cached = await cacheService.get(line);
-            if (cached) {
-                return { success: true, data: { ...cached, searchedTerm: line }, fromCache: true };
-            }
-
+            if (cached) return { success: true, data: { ...cached, searchedTerm: line }, fromCache: true };
             try {
                 const { businesses } = await processSingleQuery(line, provider, serperKey, country, strategy);
                 return { success: true, data: businesses[0], fromCache: false };
             } catch (e: any) {
-                return { 
-                    success: false, 
-                    data: { name: line, status: "Erreur", address: e.message || "Erreur technique", phone: "", hours: "", searchedTerm: line } as BusinessData 
-                };
+                return { success: false, data: { name: line, status: "Erreur", address: e.message || "Erreur technique", phone: "", hours: "", searchedTerm: line } as BusinessData };
             }
         });
 
-        const batchResults = await Promise.all(promises);
-        if (stopRef.current) break;
-        
-        const realApiCallCount = batchResults.filter(r => !r.fromCache && r.success).length;
-        if (realApiCallCount > 0) {
-            updateQuotaUsed(realApiCallCount * costPerQuery);
-        }
+        try {
+            const batchResults = await Promise.all(promises);
+            if (stopRef.current) break;
+            
+            const realApiCallCount = batchResults.filter(r => !r.fromCache && r.success).length;
+            if (realApiCallCount > 0) updateQuotaUsed(realApiCallCount * costPerQuery);
 
-        const validResultsToAdd: BusinessData[] = [];
-        const resultsToDisplay: BusinessData[] = [];
-        
-        for (const res of batchResults) {
-            if (res.success && res.data) {
-                let item = res.data;
-                let saveToProject = true;
-
-                const blCheck = blacklistService.isBlacklisted(item);
-                if (blCheck.isBlacklisted) {
-                    item = { ...item, status: `Ignoré (Blacklist)`, email: undefined, phone: undefined };
-                    saveToProject = false;
-                }
-
-                if (saveToProject && activeProjectId) {
-                     const dupCheck = await globalIndexService.checkDuplicate(item);
-                     if (dupCheck.isDuplicate && dupCheck.projectId !== activeProjectId) {
-                         const projName = await projectService.getProjectName(dupCheck.projectId || '');
-                         item = { ...item, status: `Doublon (Dossier: ${projName})` };
-                     }
-                }
-                
-                resultsToDisplay.push(item);
-
-                if (saveToProject) {
-                    validResultsToAdd.push(item);
-                    if (!res.fromCache) {
-                        await cacheService.set(item.searchedTerm || item.name, item);
+            const validResultsToAdd: BusinessData[] = [];
+            const resultsToDisplay: BusinessData[] = [];
+            
+            for (const res of batchResults) {
+                if (res.success && res.data) {
+                    let item = res.data;
+                    let saveToProject = true;
+                    const blCheck = blacklistService.isBlacklisted(item);
+                    if (blCheck.isBlacklisted) {
+                        item = { ...item, status: `Ignoré (Blacklist)`, email: undefined, phone: undefined };
+                        saveToProject = false;
                     }
+                    if (saveToProject && activeProjectId) {
+                        const dupCheck = await globalIndexService.checkDuplicate(item);
+                        if (dupCheck.isDuplicate && dupCheck.projectId !== activeProjectId) {
+                            const projName = await projectService.getProjectName(dupCheck.projectId || '');
+                            item = { ...item, status: `Doublon (Dossier: ${projName})` };
+                        }
+                    }
+                    resultsToDisplay.push(item);
+                    if (saveToProject) {
+                        validResultsToAdd.push(item);
+                        if (!res.fromCache) await cacheService.set(item.searchedTerm || item.name, item);
+                    }
+                } else if (!res.success && res.data) {
+                    resultsToDisplay.push(res.data);
                 }
-            } else if (!res.success && res.data) {
-                 resultsToDisplay.push(res.data);
             }
-        }
 
-        if (validResultsToAdd.length > 0) {
-             await refreshHistoryCount();
-             
-             if (activeProjectId) {
-                 await projectService.addResultsToProject(activeProjectId, validResultsToAdd);
-             }
-        }
-        
-        setState(prev => {
-            if (stopRef.current) return prev;
-            const newResults = mergeNewResults(prev.results, resultsToDisplay);
-            const nextIndex = Math.min(i + BATCH_CONCURRENCY, lines.length);
-            saveSession(query, nextIndex, newResults, { isPaidMode, serperKey, country, strategy });
-            return { 
-                ...prev, 
-                progress: { current: nextIndex, total: lines.length }, 
-                results: newResults 
-            };
-        });
-             
-        if (activeProjectId) await loadProjects();
-
-        if (i + BATCH_CONCURRENCY < lines.length) {
-            await delay(BATCH_DELAY_MS);
+            if (validResultsToAdd.length > 0) {
+                await refreshHistoryCount();
+                if (activeProjectId) await projectService.addResultsToProject(activeProjectId, validResultsToAdd);
+            }
+            
+            setState(prev => {
+                if (stopRef.current) return prev;
+                const newResults = mergeNewResults(prev.results, resultsToDisplay);
+                const nextIndex = Math.min(i + CONFIG.BATCH_CONCURRENCY, lines.length);
+                saveSession(query, nextIndex, newResults, { isPaidMode, serperKey, country, strategy });
+                return { ...prev, progress: { current: nextIndex, total: lines.length }, results: newResults };
+            });
+                
+            if (activeProjectId) await loadProjects();
+            if (i + CONFIG.BATCH_CONCURRENCY < lines.length) await delay(CONFIG.BATCH_DELAY_MS);
+        } catch (err: any) {
+            if (stopRef.current) break;
+            const errorSteps: TimelineStep[] = [
+                initialSteps[0],
+                { title: "Recherche & Analyse", description: err.message || "Erreur inconnue", status: 'failed' },
+                { title: "Finalisation", description: "Processus échoué.", status: 'pending' },
+            ];
+            setTimelineSteps(errorSteps);
+            const errorMessage = err.message || "Erreur lors de la récupération.";
+            setState(prev => ({ ...prev, isLoading: false, error: errorMessage }));
+            addToast({ type: 'error', title: "Erreur de Recherche par lot", message: errorMessage });
+            break; // Stop batch on error
         }
       }
 
-      if (activeProjectId) {
-           await performAutoSave();
+      if (!stopRef.current && !state.error) {
+          const finalSteps: TimelineStep[] = [
+              { title: "Préparation", description: `${lines.length} lignes traitées.`, status: 'completed' },
+              { title: "Recherche & Analyse", description: "Analyse terminée.", status: 'completed' },
+              { title: "Finalisation", description: "Sauvegarde des données.", status: 'completed' },
+          ];
+          setTimelineSteps(finalSteps);
       }
-
-      if (!stopRef.current) {
-          localStorage.removeItem(SESSION_KEY);
-      }
+      
+      if (activeProjectId) await performAutoSave();
+      if (!stopRef.current) localStorage.removeItem(CONFIG.SESSION_KEY);
       if (activeProjectId) await loadProjects();
+      
       setState(prev => ({ ...prev, isLoading: false }));
       setEstimatedTimeLeft(null);
     }
-  }, [activeProjectId, state.results, projects, columnLabels]); 
+  }, [activeProjectId, loadProjects, performAutoSave, updateQuotaUsed, saveSession, refreshHistoryCount, addToast, state.error]); 
 
+  const resumeSession = useCallback(() => {
+    if (!activeSession) return;
+    setState(prev => ({
+        ...prev,
+        results: activeSession.results,
+        progress: { current: activeSession.currentIndex, total: activeSession.query.split('\n').filter(l => l.trim()).length }
+    }));
 
-  const handleStop = () => { stopRef.current = true; setState(prev => ({ ...prev, isLoading: false })); };
+    handleSearch(
+        activeSession.query, false, true, true, activeSession.config.isPaidMode, 'serper_eco',
+        activeSession.config.serperKey, activeSession.config.country, activeSession.config.strategy, activeSession.currentIndex
+    );
+    setActiveSession(null);
+  }, [activeSession, handleSearch]);
+
+  const handleStop = () => { 
+      stopRef.current = true; 
+      setState(prev => ({ ...prev, isLoading: false }));
+      setTimelineSteps(prev => [
+          prev[0],
+          { title: "Recherche & Analyse", description: "Arrêt manuel par l'utilisateur.", status: 'failed' },
+          { title: "Finalisation", description: "Processus interrompu.", status: 'pending' },
+      ]);
+      addToast({type: 'info', title: 'Arrêt Manuel', message: 'Le traitement du lot a été interrompu.'})
+  };
+
   const handleClearResults = () => { stopRef.current = true; setState({ isLoading: false, isBatchMode: false, progress: { current: 0, total: 0 }, results: [], error: null, rawText: null }); setActiveProjectId(null); setDirHandle(null); };
 
-  const getFilteredData = () => {
+  // OPTIMIZED: Memoized filtered data to avoid recalculation on every render
+  const filteredData = useMemo(() => {
     let dataToExport = [...state.results];
     if (exportFilters.excludeClosed) {
         dataToExport = dataToExport.filter(r => {
@@ -602,47 +561,60 @@ const App: React.FC = () => {
         });
     }
     return dataToExport;
-  };
+  }, [state.results, exportFilters]);
 
-  const downloadExcel = () => {
-    const dataToExport = getFilteredData();
-    if (dataToExport.length === 0) { alert("Aucune donnée à exporter."); return; }
+  const downloadExcel = useCallback(() => {
+    if (filteredData.length === 0) { addToast({type: 'info', title: 'Exportation Vide', message: 'Aucune donnée à exporter selon les filtres actuels.'}); return; }
     const fileName = `lead_harvest_${activeProjectId ? projects.find(p => p.id === activeProjectId)?.name : 'temp'}_${new Date().toISOString().slice(0, 10)}`;
-    exportToExcel(dataToExport, fileName, columnLabels);
-  };
+    exportToExcel(filteredData, fileName, columnLabels);
+    addToast({type: 'success', title: 'Exportation Réussie', message: `${filteredData.length} lignes exportées en Excel.`});
+  }, [filteredData, activeProjectId, projects, columnLabels, addToast]);
   
-  const downloadJSON = () => {
-    const dataToExport = getFilteredData();
-    const blob = new Blob([JSON.stringify(dataToExport, null, 2)], { type: 'application/json' });
+  const downloadJSON = useCallback(() => {
+    const blob = new Blob([JSON.stringify(filteredData, null, 2)], { type: 'application/json' });
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
     link.download = `lead_harvest_${activeProjectId ? projects.find(p => p.id === activeProjectId)?.name : 'temp'}_${new Date().toISOString().slice(0, 10)}.json`;
     link.click();
-  };
+    addToast({type: 'success', title: 'Exportation Réussie', message: `${filteredData.length} lignes exportées en JSON.`});
+  }, [filteredData, activeProjectId, projects, addToast]);
 
-  const downloadHTML = () => {
-      const dataToExport = getFilteredData();
+  const downloadHTML = useCallback(() => {
       const projName = activeProjectId ? projects.find(p => p.id === activeProjectId)?.name || 'Projet' : 'Session Temporaire';
-      generateInteractiveHTML(dataToExport, projName);
-  };
+      generateInteractiveHTML(filteredData, projName);
+  }, [filteredData, activeProjectId, projects, generateInteractiveHTML]);
 
-  const stats = {
-      total: state.results.length,
-      emails: state.results.filter(r => r.email).length,
-      phones: state.results.filter(r => r.phone && r.phone !== 'N/A').length,
-  };
+  const stats = useMemo(() => {
+      const actives = state.results.filter(r => {
+          const s = r.status?.toLowerCase() || "";
+          return s.includes('activ') || s.includes('ouvert') || s.includes('web') || s.includes('trouvé') || s.includes('(cache)');
+      }).length;
 
-  const toggleDashboardFilter = (type: 'email' | 'phone') => {
-      if (type === 'email') setExportFilters(prev => ({ ...prev, onlyWithEmail: !prev.onlyWithEmail }));
-      if (type === 'phone') setExportFilters(prev => ({ ...prev, excludeNoPhone: !prev.excludeNoPhone }));
-  };
+      const closed = state.results.filter(r => {
+          const s = r.status?.toLowerCase() || "";
+          return s.includes('définitiv') || s.includes('permanent');
+      }).length;
+      
+      const warnings = state.results.filter(r => {
+          const s = r.status?.toLowerCase() || "";
+          return s.includes('ferm') || s.includes('doublon') || s.includes('ignoré') || s.includes('erreur');
+      }).length;
+
+      const emails = state.results.filter(r => r.email && r.email.trim() !== '').length;
+
+      return {
+          actives,
+          closed,
+          warnings,
+          emails
+      };
+  }, [state.results]);
 
   if (authLoading) {
       return (
-        <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 gap-4">
-            <Loader2 className="w-8 h-8 text-indigo-600 animate-spin" />
-            <span className="text-slate-500 font-medium">Initialisation du système...</span>
-        </div>
+        <Suspense fallback={<div className="fixed inset-0 bg-slate-900" />}>
+            <LoadingScreen />
+        </Suspense>
       );
   }
 
@@ -669,7 +641,7 @@ const App: React.FC = () => {
       <main className="max-w-[1800px] mx-auto px-4 sm:px-6 lg:px-8 pt-28 pb-24 relative z-10">
         
         {activeSession && !state.isLoading && (
-            <div className="mb-8 p-4 rounded-xl bg-white border border-indigo-100 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 animate-in slide-in-from-top-4 shadow-lg shadow-indigo-100/50">
+            <div className="mb-8 p-4 rounded-xl bg-white border border-indigo-100 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 animate-fade-in-up shadow-lg shadow-indigo-100/50">
                 <div className="flex items-start gap-3">
                     <div className="p-2 bg-indigo-50 rounded-lg text-indigo-600"><PlayCircle className="w-5 h-5" /></div>
                     <div>
@@ -679,14 +651,14 @@ const App: React.FC = () => {
                 </div>
                 <div className="flex items-center gap-3 w-full sm:w-auto">
                     <button onClick={discardSession} className="flex-1 sm:flex-none px-4 py-2 text-xs font-medium text-slate-500 hover:bg-slate-50 rounded-lg transition-colors">Ignorer</button>
-                    <button onClick={resumeSession} className="flex-1 sm:flex-none px-5 py-2 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg shadow-md flex items-center justify-center gap-2 transition-all active:scale-95"><Zap className="w-3.5 h-3.5" /> Reprendre</button>
+                    <button onClick={resumeSession} className="flex-1 sm:flex-none px-5 py-2 text-xs font-semibold text-white bg-indigo-600 rounded-lg btn-modern flex items-center justify-center gap-2"><Zap className="w-3.5 h-3.5" /> Reprendre</button>
                 </div>
             </div>
         )}
 
-        <div className="text-center mb-12 animate-in fade-in zoom-in-95 duration-700">
+        <div className="text-center mb-12 animate-scale-in">
           <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full border border-indigo-100 bg-indigo-50 text-indigo-700 text-[11px] font-bold uppercase tracking-wider mb-4 shadow-sm">
-            <Sparkles className="w-3 h-3" />
+            <Sparkles className="w-3 h-3 animate-float" />
             Vérification Instantanée
           </div>
           <h2 className="text-4xl sm:text-5xl font-bold text-slate-900 mb-4 tracking-tight">
@@ -700,33 +672,31 @@ const App: React.FC = () => {
             projects={projects}
             activeProjectId={activeProjectId}
             onSelectProject={selectProjectAndLoadContent}
-            onCreateProject={handleCreateProject}
+            onCreateProject={(name) => {
+                handleCreateProject(name);
+                addToast({type: 'success', title: 'Dossier Créé', message: `Le dossier "${name}" est maintenant actif.`});
+            }}
             quotaLimit={quotaLimit}
             quotaUsed={quotaUsed}
             onUpdateQuotaLimit={handleUpdateQuotaLimit}
             onResetQuota={handleResetQuota}
         />
 
-        {state.isBatchMode && (state.isLoading || state.progress.current > 0) && (
-          <div className="max-w-4xl mx-auto mb-8 p-5 rounded-2xl bg-white border border-slate-200 shadow-xl flex flex-col gap-4 animate-in slide-in-from-bottom-4">
-             <div className="flex justify-between items-center">
-               <div className="flex items-center gap-3">
-                 <div className="flex flex-col">
-                    <span className="text-sm font-bold text-slate-800">Traitement du lot en cours</span>
-                    <span className="text-xs text-slate-500">Ligne {state.progress.current} sur {state.progress.total}</span>
-                 </div>
-                 {estimatedTimeLeft && <span className="hidden sm:flex text-xs items-center gap-1.5 text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-md border border-indigo-100 font-mono"><Clock className="w-3.5 h-3.5" /> ~ {estimatedTimeLeft}</span>}
-               </div>
-               {state.isLoading && <button onClick={handleStop} className="flex items-center gap-1.5 text-xs font-medium text-rose-500 hover:text-rose-600 border border-rose-200 rounded-lg px-3 py-1.5 bg-rose-50 hover:bg-rose-100 transition-colors"><StopCircle className="w-3.5 h-3.5" /> Arrêter</button>}
-             </div>
-             <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden relative">
-               <div className="h-2 rounded-full transition-all duration-500 ease-out relative bg-gradient-to-r from-indigo-500 to-violet-500" style={{ width: `${(state.progress.current / state.progress.total) * 100}%` }}></div>
-             </div>
-          </div>
-        )}
+        <Suspense fallback={<div className="h-40" />}>
+            {state.isBatchMode && (state.isLoading || state.progress.current > 0) && (
+              <BatchProgress
+                  progress={state.progress.current}
+                  total={state.progress.total}
+                  estimatedTimeLeft={estimatedTimeLeft}
+                  timelineSteps={timelineSteps}
+                  onStop={handleStop}
+                  isLoading={state.isLoading}
+              />
+            )}
+        </Suspense>
 
-        {state.error && (
-          <div className="max-w-4xl mx-auto mb-8 p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-600 flex items-center justify-center gap-3 animate-in fade-in">
+        {state.error && !state.isLoading && (
+          <div className="max-w-4xl mx-auto mb-8 p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-600 flex items-center justify-center gap-3 animate-fade-in">
             <AlertOctagon className="w-5 h-5" /> <span>{state.error}</span>
           </div>
         )}
@@ -734,16 +704,12 @@ const App: React.FC = () => {
         {(state.results.length > 0 || activeProjectId) && (
           <div className="space-y-6">
             
-            <DashboardStats 
-                stats={stats}
-                exportFilters={exportFilters}
-                onToggleFilter={toggleDashboardFilter}
-            />
+            <DashboardStats stats={stats} />
 
-            <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-6 px-2 mb-4 animate-in slide-in-from-bottom-8 delay-100 duration-500">
+            <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-6 px-2 mb-4 animate-fade-in">
               <div className="flex items-center gap-3">
                 <h3 className="text-lg font-semibold text-slate-800 flex items-center gap-3">
-                  <span className="flex items-center justify-center w-7 h-7 bg-slate-900 text-white rounded-full text-xs font-bold shadow-md">{getFilteredData().length}</span>
+                  <span className="flex items-center justify-center w-7 h-7 bg-slate-900 text-white rounded-full text-xs font-bold shadow-md">{filteredData.length}</span>
                   Résultats {activeProjectId ? '(Sauvegardé)' : '(Temp)'}
                 </h3>
                 {activeProjectId && (
@@ -777,7 +743,7 @@ const App: React.FC = () => {
                          )}
                     </div>
                 )}
-                <button onClick={handleClearResults} title="Fermer la vue" className="p-2 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-rose-50 transition-colors"><X className="w-4 h-4" /></button>
+                <button onClick={handleClearResults} title="Fermer la vue" aria-label="Fermer la vue des résultats" className="p-2 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-rose-50 transition-colors"><X className="w-4 h-4" /></button>
               </div>
               
               <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center bg-white p-2 rounded-xl border border-slate-200 shadow-sm w-full xl:w-auto">
@@ -795,20 +761,20 @@ const App: React.FC = () => {
                     <button onClick={() => setExportFilters(prev => ({ ...prev, onlyWithEmail: !prev.onlyWithEmail }))} className={`px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-all border flex items-center gap-1.5 ${exportFilters.onlyWithEmail ? 'bg-indigo-50 border-indigo-200 text-indigo-600' : 'bg-slate-50 border-slate-100 text-slate-500 hover:bg-white hover:border-slate-300'}`}>{exportFilters.onlyWithEmail ? <Check className="w-3 h-3" /> : <div className="w-3 h-3" />}Avec Email</button>
                 </div>
                 <div className="flex items-center gap-2 ml-auto">
-                    <button onClick={downloadHTML} className="group flex items-center gap-2 px-3 py-2 text-xs font-bold text-slate-600 bg-slate-50 hover:bg-white rounded-lg transition-all border border-slate-200 shadow-sm" title="Télécharger Mini-App HTML autonome"><FileCode className="w-3.5 h-3.5" /></button>
-                    <button onClick={downloadJSON} className="group flex items-center gap-2 px-3 py-2 text-xs font-bold text-slate-600 bg-slate-50 hover:bg-white rounded-lg transition-all border border-slate-200 shadow-sm" title="Télécharger JSON"><FileJson className="w-3.5 h-3.5" /></button>
-                    <button onClick={downloadExcel} className="group flex items-center gap-2 px-4 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-all shadow-md active:scale-95 whitespace-nowrap"><FileSpreadsheet className="w-3.5 h-3.5 group-hover:animate-bounce" /> Excel</button>
+                    <button onClick={downloadHTML} className="group flex items-center gap-2 px-3 py-2 text-xs font-bold text-slate-600 bg-slate-50 hover:bg-white rounded-lg border border-slate-200 shadow-sm hover-lift" title="Télécharger Mini-App HTML autonome"><FileCode className="w-3.5 h-3.5" /></button>
+                    <button onClick={downloadJSON} className="group flex items-center gap-2 px-3 py-2 text-xs font-bold text-slate-600 bg-slate-50 hover:bg-white rounded-lg border border-slate-200 shadow-sm hover-lift" title="Télécharger JSON"><FileJson className="w-3.5 h-3.5" /></button>
+                    <button onClick={downloadExcel} className="group flex items-center gap-2 px-4 py-2 text-xs font-bold text-white bg-indigo-600 rounded-lg btn-modern whitespace-nowrap"><FileSpreadsheet className="w-3.5 h-3.5 group-hover:animate-bounce" /> Excel</button>
                 </div>
               </div>
             </div>
 
             <ResultTable 
-                data={getFilteredData()} 
+                data={filteredData} 
                 onUpdate={handleUpdateResult} 
                 columnLabels={columnLabels}
             />
 
-            <div className="mt-8 p-4 rounded-xl bg-white border border-slate-200 text-xs text-slate-500 flex items-start gap-3 max-w-2xl mx-auto shadow-sm animate-in fade-in delay-300">
+            <div className="mt-8 p-4 rounded-xl bg-white border border-slate-200 text-xs text-slate-500 flex items-start gap-3 max-w-2xl mx-auto shadow-sm animate-fade-in">
                <Info className="w-4 h-4 mt-0.5 shrink-0 text-indigo-500" />
                <div className="space-y-1">
                  <p>Les données sont enregistrées automatiquement en local. Aucune donnée ne transite vers nos serveurs.</p>
@@ -816,37 +782,46 @@ const App: React.FC = () => {
             </div>
           </div>
         )}
+        
+        <Suspense fallback={<div className="fixed inset-0 bg-black/10 z-[101]" />}>
+            <ProjectModal 
+                isOpen={showProjectModal}
+                onClose={() => setShowProjectModal(false)}
+                projects={projects}
+                activeProjectId={activeProjectId}
+                onSelectProject={selectProjectAndLoadContent}
+                onDeleteProject={handleDeleteProject}
+                onExportProject={handleExportProject}
+            />
 
-        <ProjectModal 
-            isOpen={showProjectModal}
-            onClose={() => setShowProjectModal(false)}
-            projects={projects}
-            activeProjectId={activeProjectId}
-            onSelectProject={selectProjectAndLoadContent}
-            onDeleteProject={handleDeleteProject}
-            onExportProject={handleExportProject}
-        />
+            <ColumnConfigModal 
+                isOpen={showColumnModal}
+                onClose={() => setShowColumnModal(false)}
+                columnLabels={columnLabels}
+                onSaveColumnLabels={saveColumnLabels}
+            />
 
-        <ColumnConfigModal 
-            isOpen={showColumnModal}
-            onClose={() => setShowColumnModal(false)}
-            columnLabels={columnLabels}
-            onSaveColumnLabels={saveColumnLabels}
-        />
-
-        <CacheModal 
-            isOpen={showCacheModal}
-            onClose={() => setShowCacheModal(false)}
-            cachedItems={cachedItems}
-            selectedCacheKeys={selectedCacheKeys}
-            onClearCache={handleClearCache}
-            onToggleSelectCacheItem={toggleSelectCacheItem}
-            onToggleSelectAllCache={toggleSelectAllCache}
-        />
+            <CacheModal 
+                isOpen={showCacheModal}
+                onClose={() => setShowCacheModal(false)}
+                cachedItems={cachedItems}
+                selectedCacheKeys={selectedCacheKeys}
+                onClearCache={handleClearCache}
+                onToggleSelectCacheItem={toggleSelectCacheItem}
+                onToggleSelectAllCache={toggleSelectAllCache}
+            />
+        </Suspense>
         
       </main>
     </div>
   );
 };
+
+const App: React.FC = () => (
+    <ToastProvider>
+        <AppContent />
+    </ToastProvider>
+);
+
 
 export default App;

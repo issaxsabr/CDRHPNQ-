@@ -1,4 +1,5 @@
 
+
 export interface ContactPerson {
   name: string;
   title?: string; // CEO, Fondateur, Directeur, Gérant...
@@ -88,6 +89,17 @@ export interface SavedSession {
     strategy: SerperStrategy;
   };
 }
+
+// Toast Notifications
+export type ToastType = 'success' | 'error' | 'info';
+export interface ToastMessage {
+  id: string;
+  type: ToastType;
+  title: string;
+  message: string;
+  duration?: number;
+}
+
 
 // Nouveaux types pour l'API File System Access
 export interface FileSystemDirectoryHandle {

@@ -1,5 +1,5 @@
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 
 export const useQuota = (defaultLimit = 5000) => {
     const [quotaLimit, setQuotaLimit] = useState(defaultLimit);
@@ -16,7 +16,7 @@ export const useQuota = (defaultLimit = 5000) => {
         }
     }, []);
 
-    const updateQuotaUsed = (cost: number) => {
+    const updateQuotaUsed = useCallback((cost: number) => {
         setQuotaUsed(prev => {
             const newValue = prev + cost;
             try {
@@ -24,21 +24,21 @@ export const useQuota = (defaultLimit = 5000) => {
             } catch(e) { console.error("Failed to save quota to localStorage", e); }
             return newValue;
         });
-    };
+    }, []);
 
-    const handleUpdateQuotaLimit = (limit: number) => {
+    const handleUpdateQuotaLimit = useCallback((limit: number) => {
         setQuotaLimit(limit);
         try {
             localStorage.setItem('mapscraper_quota_limit', String(limit));
         } catch(e) { console.error("Failed to save quota limit to localStorage", e); }
-    };
+    }, []);
 
-    const handleResetQuota = () => {
+    const handleResetQuota = useCallback(() => {
         setQuotaUsed(0);
         try {
             localStorage.setItem('mapscraper_quota_used', '0');
         } catch(e) { console.error("Failed to reset quota in localStorage", e); }
-    };
+    }, []);
 
     return {
         quotaLimit,
