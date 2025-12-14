@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { MapIcon, Folder, Database, LogOut } from 'lucide-react';
+import { MapIcon, Folder, Database, LogOut, HelpCircle } from 'lucide-react';
 
 interface HeaderProps {
     projectCount: number;
@@ -8,10 +8,11 @@ interface HeaderProps {
     onOpenProjectModal: () => void;
     onOpenCacheModal: () => void;
     onLogout: () => void;
+    onStartTour: () => void;
 }
 
 const Header: React.FC<HeaderProps> = ({ 
-    projectCount, historyCount, onOpenProjectModal, onOpenCacheModal, onLogout 
+    projectCount, historyCount, onOpenProjectModal, onOpenCacheModal, onLogout, onStartTour 
 }) => {
   return (
     <header className="fixed top-0 w-full z-50 border-b border-slate-200/50 glass shadow-sm">
@@ -27,7 +28,7 @@ const Header: React.FC<HeaderProps> = ({
                     CDRHPNQ 
                 </h1>
             </div>
-            <div className="flex items-center gap-4">
+            <div id="header-controls" className="flex items-center gap-4">
                 <button onClick={onOpenProjectModal} className="flex items-center gap-2 text-xs font-medium text-slate-600 bg-white px-3 py-1.5 rounded-full border border-slate-200 hover:bg-slate-50 transition-all shadow-sm cursor-pointer hover:border-indigo-300 group">
                     <Folder className="w-3.5 h-3.5 text-indigo-500 group-hover:text-indigo-600" />
                     <span>Dossiers ({projectCount})</span>
@@ -35,6 +36,10 @@ const Header: React.FC<HeaderProps> = ({
                 <button onClick={onOpenCacheModal} className="hidden sm:flex items-center gap-2 text-xs font-medium text-slate-500 bg-white px-3 py-1.5 rounded-full border border-slate-200 hover:bg-slate-50 transition-all shadow-sm cursor-pointer hover:border-indigo-300 group">
                     <Database className="w-3.5 h-3.5 text-slate-400 group-hover:text-indigo-500" />
                     <span>Cache ({historyCount})</span>
+                </button>
+                <button onClick={onStartTour} className="hidden sm:flex items-center gap-2 text-xs font-medium text-slate-500 bg-white px-3 py-1.5 rounded-full border border-slate-200 hover:bg-slate-50 transition-all shadow-sm cursor-pointer hover:border-indigo-300 group">
+                    <HelpCircle className="w-3.5 h-3.5 text-slate-400 group-hover:text-indigo-500" />
+                    <span>Aide</span>
                 </button>
                 <button onClick={onLogout} className="flex items-center gap-2 text-xs font-medium text-rose-500 bg-white px-3 py-1.5 rounded-full border border-rose-100 hover:bg-rose-50 transition-all shadow-sm cursor-pointer hover:border-rose-300">
                     <LogOut className="w-3.5 h-3.5" />

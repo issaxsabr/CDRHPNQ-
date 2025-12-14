@@ -1,5 +1,6 @@
 
 
+
 export interface ContactPerson {
   name: string;
   title?: string; // CEO, Fondateur, Directeur, Gérant...
@@ -37,6 +38,9 @@ export interface BusinessData {
 
   // Optimisation #14 : Champ Personnalisé (Custom Column)
   customField?: string; // Ex: "Note", "Secrétaire", "Portier"...
+
+  // NOUVEAU: Score de qualité global
+  qualityScore?: number;
 }
 
 export interface ColumnLabelMap {
@@ -48,6 +52,7 @@ export interface ColumnLabelMap {
   hours: string;
   email: string;
   customField: string; // Nom de la colonne personnalisée
+  qualityScore: string; // Nom de la colonne de qualité
 }
 
 export interface Project {

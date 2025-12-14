@@ -168,7 +168,7 @@ const SearchBar: React.FC<SearchBarProps> = ({
       {/* Top Tabs & Settings Toggle */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4 sm:gap-0">
         <div className="flex items-center gap-2">
-            <div className="p-1 bg-white border border-slate-200 rounded-lg flex gap-1 shadow-sm">
+            <div id="mode-selector" className="p-1 bg-white border border-slate-200 rounded-lg flex gap-1 shadow-sm">
                 <button
                 type="button"
                 onClick={() => setMode('simple')}
@@ -200,7 +200,7 @@ const SearchBar: React.FC<SearchBarProps> = ({
         
         <div className="flex items-center gap-3 w-full sm:w-auto">
              {/* Project Selector - NOUVEAU DESIGN */}
-             <div className="relative group w-full sm:w-[260px] h-10">
+             <div id="project-selector" className="relative group w-full sm:w-[260px] h-10">
                  {isCreatingProject ? (
                      <div className="absolute inset-0 flex items-center bg-white rounded-lg border-2 border-indigo-500 shadow-md animate-scale-in z-20">
                          <div className="pl-3 pr-2 text-indigo-500"><FolderPlus className="w-4 h-4"/></div>
@@ -399,7 +399,7 @@ const SearchBar: React.FC<SearchBarProps> = ({
           </div>
       )}
 
-      <form onSubmit={handleSubmit} className="relative">
+      <form onSubmit={handleSubmit} className="relative" id="search-form">
         {mode === 'simple' ? (
           <div className="space-y-4">
             {/* Input Bar */}
@@ -447,7 +447,7 @@ const SearchBar: React.FC<SearchBarProps> = ({
             </div>
             
             {/* Strategy Selector (Shared) */}
-            <div className="p-4 rounded-xl bg-white border border-slate-200 shadow-sm">
+            <div id="strategy-selector" className="p-4 rounded-xl bg-white border border-slate-200 shadow-sm">
                 <div className="space-y-3">
                     <div className="flex items-center justify-between">
                         <label className="text-xs font-bold text-slate-600 uppercase tracking-wider flex items-center gap-1.5">

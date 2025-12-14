@@ -2,46 +2,46 @@
 import { supabase } from './supabase';
 import { SerperStrategy } from '../types';
 
-export const searchWithSerper = async (query: string, _apiKey: string, country: string = 'qc', strategy: SerperStrategy = 'maps_basic') => {
-  // Note: _apiKey est désormais ignoré car la clé est gérée de manière sécurisée côté serveur (Supabase Edge Function)
+export interface SerperOptimizedResult {
+    places: any[];
+    organic: any[];
+    knowledgeGraph: any | null;
+    decisionMakersContext?: any[];
+    socialsContext?: any[];
+    searchQuality: 'GOOD' | 'FALLBACK' | 'EMPTY';
+}
 
-  let locationString: string | undefined;
-  // Mapping des provinces pour Serper Location
-  switch (country) {
-      case 'qc': locationString = "Quebec, Canada"; break;
-      case 'on': locationString = "Ontario, Canada"; break;
-      case 'bc': locationString = "British Columbia, Canada"; break;
-      case 'ab': locationString = "Alberta, Canada"; break;
-      case 'mb': locationString = "Manitoba, Canada"; break;
-      case 'sk': locationString = "Saskatchewan, Canada"; break;
-      case 'ns': locationString = "Nova Scotia, Canada"; break;
-      case 'nb': locationString = "New Brunswick, Canada"; break;
-      case 'nl': locationString = "Newfoundland and Labrador, Canada"; break;
-      case 'pe': locationString = "Prince Edward Island, Canada"; break;
-      case 'yt': locationString = "Yukon, Canada"; break;
-      case 'nt': locationString = "Northwest Territories, Canada"; break;
-      case 'nu': locationString = "Nunavut, Canada"; break;
-      default: locationString = "Canada"; // Fallback générique
-  }
-  
-  const doFetch = async (endpoint: string, customQuery?: string) => {
-    let queryToUse = customQuery || (locationString ? `${query} ${locationString}` : query);
+interface SerperOptions {
+    enableDecisionMakerSearch?: boolean;
+    enableSocialsSearch?: boolean;
+}
 
-    // Si c'est une recherche web générale (pas pour l'email), on la guide pour de meilleurs résultats
-    if (endpoint === 'search' && !customQuery) {
-        queryToUse = `${queryToUse} (adresse OR téléphone OR horaires OR contact)`;
+const doFetch = async (endpoint: string, query: string, country: string) => {
+    let locationString: string | undefined;
+    switch (country) {
+        case 'qc': locationString = "Quebec, Canada"; break;
+        case 'on': locationString = "Ontario, Canada"; break;
+        case 'bc': locationString = "British Columbia, Canada"; break;
+        case 'ab': locationString = "Alberta, Canada"; break;
+        case 'mb': locationString = "Manitoba, Canada"; break;
+        case 'sk': locationString = "Saskatchewan, Canada"; break;
+        case 'ns': locationString = "Nova Scotia, Canada"; break;
+        case 'nb': locationString = "New Brunswick, Canada"; break;
+        case 'nl': locationString = "Newfoundland and Labrador, Canada"; break;
+        case 'pe': locationString = "Prince Edward Island, Canada"; break;
+        case 'yt': locationString = "Yukon, Canada"; break;
+        case 'nt': locationString = "Northwest Territories, Canada"; break;
+        case 'nu': locationString = "Nunavut, Canada"; break;
+        default: locationString = "Canada";
     }
-    
+  
     const requestBody = {
-        "q": queryToUse,
-        "gl": "ca", // TOUJOURS Canada
+        "q": query,
+        "gl": "ca",
         "hl": "fr",
         "location": endpoint === 'maps' ? locationString : undefined
     };
 
-    // --- SÉCURITÉ : APPEL VIA EDGE FUNCTION ---
-    // On n'appelle plus directment google.serper.dev
-    // On passe par notre proxy Supabase qui détient la clé secrète
     const { data, error } = await supabase.functions.invoke('proxy-api', {
         body: {
             service: 'serper',
@@ -53,63 +53,78 @@ export const searchWithSerper = async (query: string, _apiKey: string, country: 
     });
 
     if (error) {
-        console.error("Erreur Proxy Supabase:", error);
-        throw new Error("Impossible de contacter le serveur sécurisé. Vérifiez votre connexion ou la configuration de la Edge Function.");
+        throw new Error(`Proxy Supabase Error: ${error.message}`);
     }
 
-    // Le proxy renvoie parfois l'erreur API dans le corps de la réponse
     if (data && data.error) {
-         throw new Error(`Erreur API Serper : ${JSON.stringify(data.error)}`);
+         throw new Error(`Serper API Error: ${JSON.stringify(data.error)}`);
     }
 
     return data;
-  };
+};
 
-  try {
-    const useMaps = strategy.startsWith('maps'); 
-    const forceEnrich = strategy === 'maps_web_enrich';
+export const searchWithSerper = async (
+    query: string, 
+    _apiKey: string, 
+    country: string = 'qc', 
+    strategy: SerperStrategy = 'maps_basic',
+    options: SerperOptions = {}
+): Promise<SerperOptimizedResult> => {
+  const { enableDecisionMakerSearch = false, enableSocialsSearch = true } = options;
 
-    let placesResult: any = null;
-    let organicResult: any = null;
-    let fallbackUsed = false;
+  let placesResult: any = null;
+  let organicResult: any = null;
+  let decisionMakersContext: any[] = [];
+  let socialsContext: any[] = [];
+  let searchQuality: 'GOOD' | 'FALLBACK' | 'EMPTY' = 'EMPTY';
 
-    // 1. RECHERCHE PRINCIPALE
-    if (useMaps) {
-        // Coût : 3 crédits
-        placesResult = await doFetch("maps");
-        
-        // NOUVEAU : Si stratégie Enrichie, on lance AUSSI la recherche web
-        // pour tenter de trouver des emails/socials que Maps ne donne pas souvent
-        if (forceEnrich) {
-             organicResult = await doFetch("search");
-        }
-    } else {
-        // Coût : 1 crédit
-        organicResult = await doFetch("search");
-    }
-    
-    // Vérification des résultats Maps
-    const hasPlace = placesResult?.places && placesResult.places.length > 0;
-    
-    // Fallback automatique : Si on a choisi Maps mais qu'il n'y a RIEN, on tente le Web (coût +1)
-    // Sauf si on l'a déjà fait via forceEnrich
-    if (useMaps && !hasPlace && !forceEnrich) {
-         organicResult = await doFetch("search");
-         fallbackUsed = true;
-    }
-    
-    // Fusion de tous les résultats
-    const finalResult = {
-        places: placesResult?.places || [],
-        organic: organicResult?.organic || placesResult?.organic || [],
-        knowledgeGraph: organicResult?.knowledgeGraph || placesResult?.knowledgeGraph || null,
-        fallbackUsed
-    };
+  const useMaps = strategy.startsWith('maps');
+  const enrichWithWeb = strategy === 'maps_web_enrich';
 
-    return finalResult;
-
-  } catch (error) {
-    console.error("Erreur Serper", error);
-    throw error;
+  const mainQuery = `${query} (adresse OR téléphone OR contact) -jobs -careers -indeed`;
+  
+  if (useMaps) {
+      placesResult = await doFetch("maps", query, country);
+      if (enrichWithWeb) {
+          organicResult = await doFetch("search", mainQuery, country);
+      }
+  } else {
+      organicResult = await doFetch("search", mainQuery, country);
   }
+
+  const hasPlace = placesResult?.places && placesResult.places.length > 0;
+  if (useMaps && !hasPlace && !enrichWithWeb) {
+      organicResult = await doFetch("search", mainQuery, country);
+      searchQuality = 'FALLBACK';
+  } else if (hasPlace || (organicResult?.organic && organicResult.organic.length > 0)) {
+      searchQuality = 'GOOD';
+  }
+
+  if (enableDecisionMakerSearch) {
+      const companyDomain = organicResult?.organic?.[0]?.link ? new URL(organicResult.organic[0].link).hostname.replace('www.','') : null;
+      const dmQueries = [
+          `"${query}" (CEO OR PDG OR Directeur OR Fondateur OR Gérant)`,
+          companyDomain ? `site:${companyDomain} (équipe OR "à propos" OR direction)` : null,
+          `site:linkedin.com/in "at ${query}" (CEO OR Fondateur OR Directeur)`
+      ].filter(Boolean) as string[];
+
+      const dmPromises = dmQueries.map(q => doFetch("search", q, country).catch(e => { console.warn(`DM search failed for query: ${q}`, e); return { organic: [] }; }));
+      const dmResults = await Promise.all(dmPromises);
+      decisionMakersContext = dmResults.flatMap(res => res.organic || []);
+  }
+  
+  if (enableSocialsSearch) {
+      const socialQuery = `"${query}" (site:linkedin.com/company OR site:facebook.com OR site:instagram.com)`;
+      const socialResult = await doFetch("search", socialQuery, country).catch(e => { console.warn('Social search failed', e); return { organic: [] }; });
+      socialsContext = socialResult.organic || [];
+  }
+
+  return {
+      places: placesResult?.places || [],
+      organic: organicResult?.organic || [],
+      knowledgeGraph: organicResult?.knowledgeGraph || placesResult?.knowledgeGraph || null,
+      decisionMakersContext,
+      socialsContext,
+      searchQuality,
+  };
 };

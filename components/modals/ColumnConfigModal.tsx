@@ -12,8 +12,8 @@ interface ColumnConfigModalProps {
 
 const COLUMN_KEYS: {key: keyof ColumnLabelMap, label: string}[] = [
     { key: 'name', label: "Nom de l'entreprise" },
+    { key: 'qualityScore', label: "Score Qualité" },
     { key: 'status', label: "Statut (Ouvert/Fermé)" },
-    { key: 'customField', label: "Champ Personnalisé (Extra)" },
     { key: 'category', label: "Catégorie" },
     { key: 'address', label: "Adresse" },
     { key: 'phone', label: "Téléphone" },

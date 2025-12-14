@@ -1,33 +1,21 @@
 
-
 import { supabase } from './supabase';
 import { BusinessData, ContactPerson } from "../types";
+import { SerperOptimizedResult } from './serper';
 
-// NOTE: Le SDK @google/genai a été retiré car nous passons maintenant par le proxy serveur sécurisé.
-// Plus de clé API exposée dans le navigateur !
-
-/**
- * Helper to find ALL phone numbers in text
- */
+// HELPER FUNCTIONS (conservées de l'ancienne version)
 const findAllPhonesInText = (text: string): string[] => {
-    // Regex plus robuste acceptant les formats internationaux et locaux
     const phoneRegex = /(?:\+?\d{1,3}[-.\s]?)?(?:\(?\d{3}\)?[-.\s]?)?\d{3}[-.\s]?\d{4}/g;
     const matches = [...text.matchAll(phoneRegex)];
     return Array.from(new Set(matches.map(m => m[0].trim())));
 };
 
-/**
- * Helper to find address-like patterns
- */
 const findAddressInText = (text: string): string | null => {
     const addressRegex = /\d+\s+[A-Za-z\u00C0-\u017F\s,.-]+(?:street|st|ave|avenue|rd|road|blvd|boulevard|rue|ch|chemin|route|dr|drive|sq|square|ln|lane|place|impasse|allée)\.?\s*(?:,|\s)\s*[A-Za-z\u00C0-\u017F\s.-]+/i;
     const match = text.match(addressRegex);
     return match ? match[0].trim() : null;
 };
 
-/**
- * Helper to extract hours from text snippet
- */
 const extractHoursFromText = (text: string): string | null => {
     const hoursPatterns = [
         /(?:lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|lun|mar|mer|jeu|ven|sam|dim|monday|tuesday|wednesday|thursday|friday|saturday|sunday|mon|tue|wed|thu|fri|sat|sun).{1,30}?(?:\d{1,2}(?:h|:|am|pm)\d{0,2}).{1,10}?(?:\d{1,2}(?:h|:|am|pm)\d{0,2})/i,
@@ -45,9 +33,6 @@ const extractHoursFromText = (text: string): string | null => {
     return null;
 };
 
-/**
- * Helper to format opening hours object to string
- */
 const formatOpeningHours = (hoursObj: any): string => {
     if (!hoursObj || typeof hoursObj !== 'object') return "N/A";
     return Object.entries(hoursObj)
@@ -55,96 +40,6 @@ const formatOpeningHours = (hoursObj: any): string => {
         .join(' | ');
 };
 
-/**
- * Helper regex pour TOUS les emails avec filtrage intelligent
- */
-const extractEmails = (text: string): string[] => {
-    const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
-    const matches = [...text.matchAll(emailRegex)];
-    
-    // Filtres anti-bruit
-    const junkDomains = ['wix.com', 'sentry.io', 'example.com', 'email.com', 'domain.com', 'noreply', 'sentry', 'ingest', 'u-2e', 'google.com'];
-    const junkUsers = ['noreply', 'no-reply', 'admin', 'webmaster', 'support-wix', 'postmaster'];
-
-    let emails = Array.from(new Set(matches.map(m => m[0].toLowerCase())))
-        .filter(email => !junkDomains.some(d => email.includes(d)))
-        .filter(email => !junkUsers.some(u => email.startsWith(u)));
-
-    // Tri intelligent: Priorité aux emails "humains" ou "contact"
-    emails.sort((a, b) => {
-        const score = (str: string) => {
-            if (str.includes('info')) return 3;
-            if (str.includes('contact')) return 3;
-            if (str.includes('hello')) return 2;
-            if (str.includes('admin')) return 1;
-            return 0;
-        };
-        return score(b) - score(a);
-    });
-
-    return emails;
-};
-
-/**
- * Nettoie le titre d'une page web pour extraire le vrai nom de l'entreprise
- */
-const cleanNameFromTitle = (title: string, query: string): string => {
-    if (!title) return query;
-
-    const genericNavTerms = [
-        'contact', 'contactez-nous', 'contact us', 'nous joindre', 'nous contacter',
-        'accueil', 'home', 'homepage', 'bienvenue', 'welcome',
-        'a propos', 'à propos', 'about', 'about us',
-        'services', 'nos services', 'produits',
-        'login', 'connexion', 'sign in',
-        'citoyens', 'citoyen', 'citizens',
-        'particuliers', 'particulier', 'individuals',
-        'entreprises', 'entreprise', 'businesses',
-        'index', 'default', 'main'
-    ];
-
-    let cleanTitle = title.trim();
-
-    if (genericNavTerms.some(t => cleanTitle.toLowerCase() === t)) {
-        return query;
-    }
-
-    const separators = [' - ', ' | ', ' : ', ' • ', ' — '];
-    let usedSeparator = separators.find(sep => cleanTitle.includes(sep));
-
-    if (usedSeparator) {
-        const parts = cleanTitle.split(usedSeparator).map(p => p.trim());
-        const validParts = parts.filter(part => {
-            const lowerPart = part.toLowerCase();
-            return !genericNavTerms.some(term => lowerPart === term || lowerPart.startsWith(term + ' '));
-        });
-
-        if (validParts.length > 0) {
-            const matchQuery = validParts.find(p => p.toLowerCase().includes(query.toLowerCase()));
-            if (matchQuery) return matchQuery;
-            return validParts[0]; 
-        } else {
-            return query;
-        }
-    }
-    
-    for (const term of genericNavTerms) {
-        if (cleanTitle.toLowerCase().startsWith(term)) {
-            const replaced = cleanTitle.substring(term.length).replace(/^[-|: ]+/, '').trim();
-            return replaced.length > 0 ? replaced : query;
-        }
-        if (cleanTitle.toLowerCase().endsWith(term)) {
-            const replaced = cleanTitle.substring(0, cleanTitle.length - term.length).replace(/[-|: ]+$/, '').trim();
-            return replaced.length > 0 ? replaced : query;
-        }
-    }
-
-    return cleanTitle;
-};
-
-/**
- * Score de priorité pour téléphone (sans-frais en premier).
- */
 const getPhoneScore = (phoneStr: string): number => {
     const p = phoneStr.replace(/\D/g, '');
     if (p.startsWith('1800') || p.startsWith('800')) return 0;
@@ -152,12 +47,9 @@ const getPhoneScore = (phoneStr: string): number => {
     if (p.startsWith('1877') || p.startsWith('877')) return 2;
     if (p.startsWith('1866') || p.startsWith('866')) return 3;
     if (p.startsWith('1855') || p.startsWith('855')) return 4;
-    return 100; // Non sans-frais
+    return 100;
 };
 
-/**
- * Formate un numéro nord-américain au format +1 (XXX) XXX-XXXX.
- */
 const formatPhoneNumber = (phoneStr: string): string => {
     const cleaned = phoneStr.replace(/\D/g, '');
     if (cleaned.length === 10) return `+1 (${cleaned.substring(0, 3)}) ${cleaned.substring(3, 6)}-${cleaned.substring(6)}`;
@@ -165,280 +57,265 @@ const formatPhoneNumber = (phoneStr: string): string => {
     return phoneStr;
 };
 
+const extractEmailsWithQuality = (text: string): { email: string; quality: number }[] => {
+    const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
+    const matches = text.match(emailRegex) || [];
+    
+    const junkDomains = ['wix.com', 'sentry.io', 'example.com', 'email.com', 'domain.com', 'google.com', 'googleapis.com'];
+    const junkUsers = ['noreply', 'no-reply', 'admin', 'webmaster', 'support', 'postmaster', 'jobs', 'careers'];
 
-/**
- * Utilise Gemini pour extraire des infos du contexte Serper et DÉTECTER LES DÉCIDEURS
- * SÉCURISÉ : Passe maintenant par Supabase Edge Function
- */
-export const enrichWithGemini = async (context: any, query: string): Promise<any> => {
-    const organic = context?.organic || [];
-    const kg = context?.knowledgeGraph || null;
+    let emails = Array.from(new Set(matches.map(m => m.toLowerCase())))
+        .filter(email => !junkDomains.some(d => email.includes(d)))
+        .filter(email => !junkUsers.some(u => email.startsWith(u)));
 
+    return emails.map(email => {
+        let quality = 50;
+        if (email.includes('info')) quality += 20;
+        if (email.includes('contact')) quality += 20;
+        if (email.includes('direction')) quality += 25;
+        if (email.includes('presidence') || email.includes('ceo') || email.includes('pdg')) quality += 30;
+        if (!email.match(/^(info|contact|admin|direction|hello|sales|ventes|marketing)@/)) quality += 15;
+        
+        return { email, quality };
+    }).sort((a, b) => b.quality - a.quality);
+};
+
+export const enrichWithGemini = async (context: SerperOptimizedResult, query: string): Promise<any> => {
     const textContext = [
-        kg?.description,
-        ...organic.slice(0, 5).map((o: any) => `${o.title} ${o.snippet}`)
+        context.knowledgeGraph?.description,
+        ...context.organic.slice(0, 5).map((o: any) => `${o.title}: ${o.snippet}`),
+        "--- DECISION MAKERS CONTEXT ---",
+        ...context.decisionMakersContext?.slice(0, 5).map((o: any) => `${o.title}: ${o.snippet}`),
+        "--- SOCIALS CONTEXT ---",
+        ...context.socialsContext?.slice(0, 3).map((o: any) => `${o.title}: ${o.snippet}`)
     ].filter(Boolean).join("\n\n");
 
-    if (!textContext.trim()) return {}; 
-    
-    const prompt = `Tu es un expert en Lead Generation. Analyse le texte pour l'entreprise "${query}".
-    
-    OBJECTIF CRITIQUE : Trouve les PERSONNES (Nom + Titre + Email).
-    
-    1. Décideurs Principaux : CEO, PDG, Owner, Fondateur, Directeur.
-    2. Employés Clés : Si tu trouves un email nominatif (ex: julie.provencher@...), cherche absolument le TITRE du poste associé dans le texte (ex: Coordonnatrice, Agente, Comptable, Secrétaire).
-    
-    Format de sortie souhaité pour keyPeople :
-    - name: Nom Prénom
-    - title: Le poste exact trouvé (ex: "Coordonnatrice aux ventes")
-    - email: L'email associé
-    
-    Extrais aussi les emails génériques et téléphones.
+    if (!textContext.trim()) return {};
 
-    Contexte :
-    ---
-    ${textContext}
-    ---
-    
-    Réponds en JSON uniquement.`;
+    const prompt = `
+<persona>
+Tu es un expert en Lead Generation B2B et en extraction de données structurées. Tu maîtrises l'identification des décideurs d'entreprise.
+</persona>
+<task>
+Analyse le texte pour "${query}" et extrais TOUTES les infos de contact.
+PRIORITÉS CRITIQUES:
+1. DÉCIDEURS: CEO, PDG, Directeur, Fondateur, Gérant, Président.
+2. EMAILS NOMINATIFS: prenom.nom@domaine + chercher le titre du poste associé.
+3. TÉLÉPHONES: Tous les numéros, y compris les sans-frais.
+4. RÉSEAUX SOCIAUX: Profils officiels (LinkedIn, Facebook, Instagram).
+RÈGLES DE QUALITÉ:
+- Pour chaque décideur, cherche son email associé.
+- Privilégie les emails génériques pertinents: info@, contact@, direction@, etc.
+- Exclure les emails non pertinents: noreply@, support@, webmaster@, jobs@.
+- Extrait le nom le plus probable de l'entreprise.
+</task>
+<context>
+${textContext.substring(0, 7000)}
+</context>
+<format>
+Réponds UNIQUEMENT en JSON structuré en respectant le schéma fourni.
+</format>
+<few_shot_examples>
+Exemple 1:
+Texte: "Contactez Jean Tremblay, PDG de ABC Inc. au jean.tremblay@abc.com"
+Output: {
+  "companyName": "ABC Inc",
+  "keyPeople": [{"name": "Jean Tremblay", "title": "PDG", "email": "jean.tremblay@abc.com"}],
+  "emails": ["jean.tremblay@abc.com"]
+}
+Exemple 2:
+Texte: "Notre équipe: Marie Dupont (Directrice) marie@xyz.ca, info@xyz.ca"
+Output: {
+  "companyName": "XYZ",
+  "keyPeople": [{"name": "Marie Dupont", "title": "Directrice", "email": "marie@xyz.ca"}],
+  "emails": ["marie@xyz.ca", "info@xyz.ca"]
+}
+</few_shot_examples>
+    `;
 
-    try {
-        // APPEL SÉCURISÉ VIA SUPABASE (Au lieu de GoogleGenAI direct)
-        const { data, error } = await supabase.functions.invoke('proxy-api', {
-            body: {
-                service: 'gemini',
-                payload: {
-                    body: {
-                        contents: [{ parts: [{ text: prompt }] }],
-                        config: {
-                            responseMimeType: "application/json",
-                            temperature: 0.2
-                        }
+    const responseSchema = {
+        type: "OBJECT",
+        properties: {
+          companyName: { type: "STRING", description: "Le nom officiel de l'entreprise." },
+          phones: { type: "ARRAY", items: { type: "STRING" }, description: "Liste des numéros de téléphone trouvés." },
+          emails: { type: "ARRAY", items: { type: "STRING" }, description: "Liste de tous les emails trouvés." },
+          keyPeople: {
+            type: "ARRAY",
+            items: {
+              type: "OBJECT",
+              properties: {
+                name: { type: "STRING", description: "Nom complet du décideur." },
+                title: { type: "STRING", description: "Poste/titre exact du décideur." },
+                email: { type: "STRING", description: "Email personnel du décideur." }
+              },
+              required: ["name", "title"]
+            },
+            description: "Liste des décideurs et employés clés identifiés."
+          },
+          socials: {
+            type: "OBJECT",
+            properties: {
+                linkedin: { type: "STRING", description: "URL du profil LinkedIn de l'entreprise." },
+                facebook: { type: "STRING", description: "URL de la page Facebook de l'entreprise." },
+                instagram: { type: "STRING", description: "URL du profil Instagram de l'entreprise." }
+            },
+            description: "Profils sur les réseaux sociaux."
+          },
+          hours: { type: "STRING", description: "Horaires d'ouverture." }
+        }
+    };
+    
+    const { data, error } = await supabase.functions.invoke('proxy-api', {
+        body: {
+            service: 'gemini',
+            payload: {
+                body: {
+                    contents: [{ parts: [{ text: prompt }] }],
+                    config: {
+                        responseMimeType: "application/json",
+                        responseSchema: responseSchema,
+                        temperature: 0.1
                     }
                 }
             }
-        });
-
-        if (error) {
-            console.error("Erreur Proxy Gemini:", error);
-            throw new Error(`Proxy Gemini Error: ${error.message || 'Unknown error'}`);
         }
+    });
 
-        const candidate = data?.candidates?.[0];
-
-        if (!candidate) {
-            console.warn("Gemini response is missing 'candidates' array or is empty:", data);
-            return { error: "Invalid response structure from Gemini proxy", keyPeople: [] };
-        }
-
-        if (candidate.finishReason && candidate.finishReason !== "STOP") {
-            console.error(`Gemini generation stopped. Reason: ${candidate.finishReason}`, "Safety Ratings:", candidate.safetyRatings);
-            return { 
-                error: `Gemini generation stopped: ${candidate.finishReason}`,
-                keyPeople: [], 
-                emails: [], 
-                phones: [] 
-            };
-        }
-
-        const textResponse = candidate.content?.parts?.[0]?.text;
-
-        if (textResponse) {
-            try {
-                return JSON.parse(textResponse);
-            } catch (parseError) {
-                console.warn("Failed to parse Gemini JSON, attempting to clean response...", textResponse);
-                const cleanedResponse = textResponse.replace(/```json/g, '').replace(/```/g, '').trim();
-                try {
-                    return JSON.parse(cleanedResponse);
-                } catch (retryParseError) {
-                    console.error("Failed to parse even after cleaning the Gemini JSON response:", cleanedResponse);
-                    return { error: "Failed to parse JSON response from Gemini", keyPeople: [] };
-                }
-            }
-        }
-        
-        console.warn("Gemini response was valid but contained no text part.", data);
-        throw new Error("Empty or invalid response from Gemini enrichment");
-
-    } catch (e: any) {
-        console.error("Erreur d'enrichissement Gemini (Proxy):", e);
-        if (e.message.startsWith('Gemini Enrichment Failed:')) {
-            throw e;
-        }
-        throw new Error(`Gemini Enrichment Failed: ${e.message || 'Unknown error'}`);
+    if (error) {
+        console.error("Erreur Proxy Gemini:", error);
+        throw new Error(`Proxy Gemini Error: ${error.message || 'Unknown error'}`);
     }
-}
+    
+    const textResponse = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!textResponse) {
+        console.warn("Gemini response was valid but contained no text part.", data);
+        return {};
+    }
 
+    try {
+        return JSON.parse(textResponse);
+    } catch (parseError) {
+        console.warn("Failed to parse Gemini JSON, attempting to clean response...", textResponse);
+        const cleanedResponse = textResponse.replace(/```json/g, '').replace(/```/g, '').trim();
+        try {
+            return JSON.parse(cleanedResponse);
+        } catch (retryParseError) {
+            console.error("Failed to parse even after cleaning the Gemini JSON response:", cleanedResponse);
+            throw new Error("Failed to parse JSON response from Gemini");
+        }
+    }
+};
 
-/**
- * Analyse les données Serper (Maps + Web) et fusionne avec Gemini (IA)
- */
 export const extractDataFromContext = async (
     query: string,
-    contextData: any,
+    contextData: SerperOptimizedResult,
     geminiData?: any,
-): Promise<{ businesses: BusinessData[]; rawText: string }> => {
+): Promise<{ businesses: BusinessData[]; rawText: string; qualityScore: number }> => {
 
-    let name = query;
-    let address = "N/A";
-    let phone = "N/A";
-    let phones: string[] = [];
-    let hours = "N/A";
-    let status = "Non trouvé"; 
-    let sourceUri = "";
-    let found = false;
-    
-    let website = "";
-    let category = "";
-    
-    let email: string | undefined;
-    let emails: string[] = [];
-    let socials: any = {};
-    let decisionMakers: ContactPerson[] = [];
+    let business: BusinessData = {
+        name: query,
+        status: "Non trouvé",
+        address: "N/A",
+        phone: "N/A",
+        hours: "N/A",
+        searchedTerm: query,
+        phones: [],
+        emails: [],
+        socials: {},
+        decisionMakers: [],
+        qualityScore: 0
+    };
 
-    const places = contextData?.places || [];
-    const organic = contextData?.organic || [];
-    const kg = contextData?.knowledgeGraph || null;
+    let qualityScore = 0;
+    const { places, organic, knowledgeGraph } = contextData;
 
-    // 1. BASE MAPS
+    // 1. Base MAPS
     if (places.length > 0) {
         const place = places[0];
-        found = true;
-
-        name = place.title || query;
-        address = place.address || "N/A";
-        phone = place.phoneNumber || place.phone || "N/A";
-        if (phone !== "N/A") phones.push(phone);
-
-        website = place.website || "";
-        category = place.type || place.category || "";
-        // Rating removed from extraction
-        
-        hours = place.openingHours ? formatOpeningHours(place.openingHours) : "Voir Fiche Maps";
-        status = (place.title && (place.title.toLowerCase().includes('closed') || place.title.toLowerCase().includes('fermé'))) 
-                 ? "Fermé (Voir Fiche)" 
-                 : "En activité";
-
-        sourceUri = place.cid 
-            ? `https://maps.google.com/?cid=${place.cid}` 
-            : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(name + " " + address)}`;
+        business.name = place.title || query;
+        business.address = place.address || "N/A";
+        business.phone = place.phoneNumber || place.phone || "N/A";
+        business.website = place.website || "";
+        business.category = place.type || place.category || "";
+        business.hours = place.openingHours ? formatOpeningHours(place.openingHours) : "Voir Fiche Maps";
+        business.status = (place.title && (place.title.toLowerCase().includes('closed') || place.title.toLowerCase().includes('fermé'))) ? "Fermé (Voir Fiche)" : "En activité";
+        business.sourceUri = place.cid ? `https://maps.google.com/?cid=${place.cid}` : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(business.name + " " + business.address)}`;
+        qualityScore += 30;
     } 
     
     // 2. FALLBACK WEB
-    if (!found) {
-        if (kg) {
-             found = true;
-             name = kg.title || name;
-             status = "Fiche Google trouvée";
-             website = kg.website || "";
-             if (kg.type) category = kg.type;
-        } else if (organic.length > 0) {
-             const org = organic[0];
-             found = true;
-             name = cleanNameFromTitle(org.title, query);
-             status = "Site Web Trouvé (Pas de fiche Maps)";
-             sourceUri = org.link;
-             website = org.link;
-             
-             if (org.snippet) {
-                 const extractedPhones = findAllPhonesInText(org.snippet);
-                 if (extractedPhones.length > 0) {
-                     phone = extractedPhones[0];
-                     phones = [...phones, ...extractedPhones];
-                 }
-                 const a = findAddressInText(org.snippet);
-                 if (a) address = a;
-                 const h = extractHoursFromText(org.snippet);
-                 if (h) hours = h;
-             }
+    else if (knowledgeGraph || organic.length > 0) {
+        const source = knowledgeGraph || organic[0];
+        business.name = source.title || query;
+        business.status = knowledgeGraph ? "Fiche Google trouvée" : "Site Web Trouvé";
+        business.website = source.website || (organic[0] ? organic[0].link : "");
+        business.category = source.type || business.category;
+        business.sourceUri = organic.length > 0 ? organic[0].link : business.sourceUri;
+
+        if (organic.length > 0 && organic[0].snippet) {
+            const snippetPhones = findAllPhonesInText(organic[0].snippet);
+            if (snippetPhones.length > 0) business.phone = snippetPhones[0];
+            if (!business.address || business.address === "N/A") business.address = findAddressInText(organic[0].snippet) || "N/A";
+            if (!business.hours || business.hours === "N/A") business.hours = extractHoursFromText(organic[0].snippet) || "N/A";
         }
+        qualityScore += 20;
+    }
+
+    if(contextData.searchQuality === 'EMPTY') {
+        return { businesses: [business], rawText: "Aucun résultat.", qualityScore: 0 };
     }
 
     // 3. ENRICHISSEMENT IA & FUSION
-    if (found) {
-        if (geminiData) {
-            if (geminiData.companyName) name = geminiData.companyName;
-            if (geminiData.phones) phones = [...phones, ...geminiData.phones];
-            if (geminiData.emails) emails = [...emails, ...geminiData.emails];
-            if (geminiData.socials) socials = { ...socials, ...geminiData.socials };
-            if (geminiData.hours && (hours === "N/A" || hours === "Voir Fiche Maps")) {
-                hours = geminiData.hours;
-            }
-            // IMPORTANT : Import des décideurs trouvés par Gemini
-            if (geminiData.keyPeople && Array.isArray(geminiData.keyPeople)) {
-                decisionMakers = geminiData.keyPeople.filter((p: any) => p.name);
-                // Ajouter l'email du décideur à la liste principale s'il est nouveau
-                decisionMakers.forEach(dm => {
-                    if (dm.email) emails.push(dm.email);
-                });
-            }
+    if (geminiData) {
+        business.name = geminiData.companyName || business.name;
+        business.phones = Array.from(new Set([...(business.phones || []), ...(geminiData.phones || [])]));
+        business.emails = Array.from(new Set([...(business.emails || []), ...(geminiData.emails || [])]));
+        business.socials = { ...business.socials, ...geminiData.socials };
+        if ((business.hours === "N/A" || business.hours === "Voir Fiche Maps") && geminiData.hours) {
+            business.hours = geminiData.hours;
         }
-        
-        // Scan additionnel des snippets pour emails
-        const combinedText = [
-            kg?.description,
-            ...organic.slice(0, 5).map((o: any) => `${o.title} ${o.snippet}`)
-        ].filter(Boolean).join(" ");
-        
-        emails = [...emails, ...extractEmails(combinedText)];
-        phones = [...phones, ...findAllPhonesInText(combinedText)];
-
-        // Nettoyage final
-        emails = Array.from(new Set(emails));
-        
-        // Dédoublonnage téléphones
-        const uniquePhonesMap = new Map<string, string>();
-        phones.forEach(p => {
-            let normalized = p.replace(/\D/g, '');
-            if (normalized.length === 10) normalized = '1' + normalized;
-            if (!uniquePhonesMap.has(normalized)) uniquePhonesMap.set(normalized, p);
-        });
-        phones = Array.from(uniquePhonesMap.values());
-        phones.sort((a, b) => getPhoneScore(a) - getPhoneScore(b));
-        phones = phones.map(p => getPhoneScore(p) < 100 ? p : formatPhoneNumber(p));
-
-        if (phones.length > 0) phone = phones[0];
-        if (emails.length > 0) email = emails[0];
-        
-        // Website fallback
-        if (organic.length > 0 && !website) website = organic[0].link;
-
-        // Horaires fallback
-        if ((hours === "N/A" || hours === "Voir Fiche Maps") && kg && kg.hours) hours = kg.hours;
-
-        return {
-            businesses: [{
-                name,
-                status,
-                address,
-                phone,
-                phones,
-                hours,
-                sourceUri,
-                searchedTerm: query,
-                website,
-                category,
-                // Removed rating, priceLevel
-                email,
-                emails,
-                socials: Object.keys(socials).length > 0 ? socials : undefined,
-                decisionMakers
-            }],
-            rawText: `Extraction Hybride Optimisée${geminiData ? ' + Analyse (Décideurs)' : ''}`
-        };
+        if (geminiData.keyPeople && Array.isArray(geminiData.keyPeople)) {
+            business.decisionMakers = geminiData.keyPeople.filter((p: any) => p.name && p.title);
+            business.decisionMakers.forEach(dm => { if (dm.email) business.emails?.push(dm.email) });
+        }
     }
+    
+    // 4. FINAL CLEANUP & SCORING
+    const combinedText = [...organic.slice(0, 3), ...contextData.decisionMakersContext?.slice(0,3) || []]
+        .map((o: any) => `${o.title} ${o.snippet}`).filter(Boolean).join(" ");
+    
+    const textEmails = extractEmailsWithQuality(combinedText);
+    business.emails = Array.from(new Set([...(business.emails || []), ...textEmails.map(e => e.email)]));
+    
+    const allPhones = findAllPhonesInText(combinedText);
+    if(business.phone && business.phone !== 'N/A') allPhones.unshift(business.phone);
+    
+    const uniquePhonesMap = new Map<string, string>();
+    allPhones.forEach(p => {
+        let normalized = p.replace(/\D/g, '');
+        if (normalized.length === 10) normalized = '1' + normalized;
+        if (!uniquePhonesMap.has(normalized)) uniquePhonesMap.set(normalized, p);
+    });
+    business.phones = Array.from(uniquePhonesMap.values());
+    business.phones.sort((a, b) => getPhoneScore(a) - getPhoneScore(b));
+    business.phones = business.phones.map(p => getPhoneScore(p) < 100 ? p : formatPhoneNumber(p));
+
+    if (business.phones.length > 0) business.phone = business.phones[0];
+    if (business.emails.length > 0) business.email = business.emails[0];
+    if (!business.website && organic.length > 0) business.website = organic[0].link;
+
+    // Final Quality Score
+    if (business.phone !== "N/A") qualityScore += 10;
+    if (business.website) qualityScore += 10;
+    if (business.category) qualityScore += 5;
+    if (business.emails && business.emails.length > 0) qualityScore += Math.min(15, business.emails.length * 5);
+    if (business.decisionMakers && business.decisionMakers.length > 0) qualityScore += Math.min(30, business.decisionMakers.length * 10);
+    
+    business.qualityScore = Math.min(100, qualityScore);
 
     return {
-        businesses: [{
-            name: query,
-            status: "Introuvable",
-            address: "N/A",
-            phone: "N/A",
-            phones: [],
-            hours: "N/A",
-            searchedTerm: query
-        }],
-        rawText: "Aucun résultat."
+        businesses: [business],
+        rawText: `Analyse Optimisée (Qualité: ${business.qualityScore})`,
+        qualityScore: business.qualityScore
     };
-}
+};

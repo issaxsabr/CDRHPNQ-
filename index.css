@@ -548,3 +548,13 @@ body {
 
 .stat-trend.up { color: #10b981; /* emerald-500 */ }
 .stat-trend.down { color: #ef4444; /* rose-500 */ }
+
+/* --- ONBOARDING GUIDE --- */
+.onboarding-highlight {
+  position: relative;
+  z-index: 1050 !important; /* Above overlay, below tooltip */
+  box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.7), 0 0 30px 10px rgba(99, 102, 241, 0.4);
+  border-radius: 12px;
+  transition: all 0.3s ease-in-out;
+  background-color: white; /* Lift element color slightly */
+}

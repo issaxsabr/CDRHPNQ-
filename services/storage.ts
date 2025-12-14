@@ -1,6 +1,7 @@
 
 import { get, set, del, keys, entries } from 'idb-keyval';
 import { BusinessData, Project } from '../types';
+import { securePack, secureUnpack } from './security';
 
 const CACHE_PREFIX = 'mapscraper_cache_';
 const PROJECTS_INDEX_KEY = 'mapscraper_projects_index';
@@ -28,31 +29,24 @@ export const fileSystemService = {
 };
 
 // --- BLACKLIST SERVICE ---
-
-// MODIFICATION : On autorise .gouv, .org, .edu etc. On ne bloque que les annuaires génériques.
 const BLACKLIST_DOMAINS = [
     'pagesjaunes.fr', 'yellowpages.ca', 'yelp.', 'tripadvisor.', 
     'societe.com', 'linkedin.com', 'facebook.com', 'instagram.com',
-    'mairie.net' // Souvent un annuaire non officiel, à voir si vous voulez le garder
+    'mairie.net'
 ];
 
-// MODIFICATION : Suppression des mots clés gouvernementaux (Mairie, Police, etc.)
-const BLACKLIST_KEYWORDS = [
-    // Liste vide pour autoriser Mairies, Hôpitaux, Associations, etc.
-];
+const BLACKLIST_KEYWORDS: string[] = [];
 
 export const blacklistService = {
     isBlacklisted: (item: BusinessData): { isBlacklisted: boolean; reason?: string } => {
         const nameLower = item.name.toLowerCase();
         
-        // 1. Keyword Check
         for (const kw of BLACKLIST_KEYWORDS) {
             if (nameLower.startsWith(kw) || nameLower.includes(` ${kw} `)) {
                 return { isBlacklisted: true, reason: `Mot-clé interdit: "${kw}"` };
             }
         }
 
-        // 2. Domain Check
         if (item.website) {
             try {
                 const hostname = new URL(item.website).hostname.toLowerCase();
@@ -61,9 +55,7 @@ export const blacklistService = {
                         return { isBlacklisted: true, reason: `Domaine ignoré (Annuaire/Social): "${domain}"` };
                     }
                 }
-            } catch (e) {
-                // Invalid URL, ignore check
-            }
+            } catch (e) { /* Invalid URL, ignore check */ }
         }
 
         return { isBlacklisted: false };
@@ -71,24 +63,16 @@ export const blacklistService = {
 };
 
 // --- GLOBAL DEDUPLICATION SERVICE ---
-
 export const globalIndexService = {
-    /**
-     * Génère une empreinte unique pour un lead (Nom + Adresse simplifiée ou Website)
-     */
     generateFingerprint: (item: BusinessData): string => {
         if (item.website && !item.website.includes('google') && !item.website.includes('facebook')) {
             return `WEB:${item.website.toLowerCase().replace(/^https?:\/\//, '').replace(/\/$/, '')}`;
         }
-        // Fallback: Nom + 10 premiers chars de l'adresse
         const simpleAddress = (item.address || '').toLowerCase().replace(/[^a-z0-9]/g, '').substring(0, 15);
         const simpleName = item.name.toLowerCase().replace(/[^a-z0-9]/g, '');
         return `GEO:${simpleName}|${simpleAddress}`;
     },
 
-    /**
-     * Vérifie si le lead existe dans UN AUTRE projet
-     */
     checkDuplicate: async (item: BusinessData): Promise<{ isDuplicate: boolean; projectId?: string }> => {
         const fingerprint = globalIndexService.generateFingerprint(item);
         const index = await get<Record<string, string>>(GLOBAL_FINGERPRINT_KEY) || {};
@@ -99,9 +83,6 @@ export const globalIndexService = {
         return { isDuplicate: false };
     },
 
-    /**
-     * Enregistre les empreintes pour un projet donné
-     */
     registerItems: async (items: BusinessData[], projectId: string) => {
         const index = await get<Record<string, string>>(GLOBAL_FINGERPRINT_KEY) || {};
         let changed = false;
@@ -121,7 +102,6 @@ export const globalIndexService = {
 };
 
 // --- PROJECT SERVICE ---
-
 export const projectService = {
   getAllProjects: async (): Promise<Project[]> => {
     try {
@@ -145,7 +125,7 @@ export const projectService = {
     };
     
     await set(PROJECTS_INDEX_KEY, [newProject, ...projects]);
-    await set(PROJECT_CONTENT_PREFIX + newProject.id, []);
+    await set(PROJECT_CONTENT_PREFIX + newProject.id, await securePack([]));
     
     return newProject;
   },
@@ -155,25 +135,20 @@ export const projectService = {
     const updatedProjects = projects.filter(p => p.id !== id);
     await set(PROJECTS_INDEX_KEY, updatedProjects);
     await del(PROJECT_CONTENT_PREFIX + id);
-    
-    // Cleanup Local Handle for this project
     await fileSystemService.clearHandle(id);
-    
-    // Cleanup Global Index (Optional but cleaner)
-    // Note: Doing a full cleanup is expensive, we might skip it or do it lazily
   },
 
   addResultsToProject: async (projectId: string, newResults: BusinessData[]): Promise<void> => {
     try {
       const contentKey = PROJECT_CONTENT_PREFIX + projectId;
-      const currentContent = await get<BusinessData[]>(contentKey) || [];
+      const encryptedContent = await get<string>(contentKey);
+      const currentContent = await secureUnpack(encryptedContent) || [];
       
       const mergedContent = [...currentContent];
       let addedCount = 0;
       const itemsToRegister: BusinessData[] = [];
 
       newResults.forEach(newItem => {
-        // Local Dedupe (in same project)
         const exists = mergedContent.some(existing => 
           existing.name === newItem.name && existing.address === newItem.address
         );
@@ -185,12 +160,9 @@ export const projectService = {
       });
 
       if (addedCount > 0) {
-        await set(contentKey, mergedContent);
-        
-        // Update Index Global for Cross-Project Dedupe
+        await set(contentKey, await securePack(mergedContent));
         await globalIndexService.registerItems(itemsToRegister, projectId);
 
-        // Update Project Meta
         const projects = await projectService.getAllProjects();
         const projectIndex = projects.findIndex(p => p.id === projectId);
         if (projectIndex >= 0) {
@@ -207,7 +179,7 @@ export const projectService = {
   updateProjectContent: async (projectId: string, fullData: BusinessData[]): Promise<void> => {
       try {
         const contentKey = PROJECT_CONTENT_PREFIX + projectId;
-        await set(contentKey, fullData);
+        await set(contentKey, await securePack(fullData));
 
         const projects = await projectService.getAllProjects();
         const projectIndex = projects.findIndex(p => p.id === projectId);
@@ -222,7 +194,8 @@ export const projectService = {
   },
 
   getProjectContent: async (projectId: string): Promise<BusinessData[]> => {
-    return await get<BusinessData[]>(PROJECT_CONTENT_PREFIX + projectId) || [];
+    const encryptedContent = await get<string>(PROJECT_CONTENT_PREFIX + projectId);
+    return await secureUnpack(encryptedContent) || [];
   },
   
   getProjectName: async (projectId: string): Promise<string> => {
@@ -232,19 +205,17 @@ export const projectService = {
   }
 };
 
-
 // --- CACHE SERVICE ---
-
 export const cacheService = {
   get: async (term: string): Promise<BusinessData | null> => {
     try {
       const key = CACHE_PREFIX + term.toLowerCase().trim();
-      const entry = await get<CacheEntry>(key);
+      const encryptedEntry = await get<string>(key);
+      const entry: CacheEntry | null = await secureUnpack(encryptedEntry);
 
       if (!entry) return null;
 
-      const now = Date.now();
-      if (now - entry.timestamp > TTL_24H) {
+      if (Date.now() - entry.timestamp > TTL_24H) {
         await del(key);
         return null;
       }
@@ -258,11 +229,8 @@ export const cacheService = {
   set: async (term: string, data: BusinessData): Promise<void> => {
     try {
       const key = CACHE_PREFIX + term.toLowerCase().trim();
-      const entry: CacheEntry = {
-        data,
-        timestamp: Date.now(),
-      };
-      await set(key, entry);
+      const entry: CacheEntry = { data, timestamp: Date.now() };
+      await set(key, await securePack(entry));
     } catch (e) {
       console.warn('Error writing to IDB cache', e);
     }
@@ -272,24 +240,26 @@ export const cacheService = {
     try {
       const allKeys = await keys();
       return allKeys.filter(k => typeof k === 'string' && k.startsWith(CACHE_PREFIX)).length;
-    } catch (e) {
-      return 0;
-    }
+    } catch (e) { return 0; }
   },
 
   getAll: async (): Promise<{term: string, data: BusinessData, timestamp: number}[]> => {
     try {
       const allEntries = await entries();
-      return allEntries
-        .filter(([k]) => typeof k === 'string' && k.startsWith(CACHE_PREFIX))
-        .map(([k, v]) => {
-          const val = v as CacheEntry;
-          return {
-            term: (k as string).replace(CACHE_PREFIX, ''),
-            data: val.data,
-            timestamp: val.timestamp
-          };
-        })
+      const decryptedItems = await Promise.all(
+          allEntries
+              .filter(([k]) => typeof k === 'string' && k.startsWith(CACHE_PREFIX))
+              .map(async ([k, v]) => {
+                  const entry: CacheEntry | null = await secureUnpack(v as string);
+                  if (!entry) return null;
+                  return {
+                      term: (k as string).replace(CACHE_PREFIX, ''),
+                      data: entry.data,
+                      timestamp: entry.timestamp
+                  };
+              })
+      );
+      return (decryptedItems.filter(Boolean) as {term: string, data: BusinessData, timestamp: number}[])
         .sort((a, b) => b.timestamp - a.timestamp);
     } catch (e) {
       console.error('Failed to get all cache', e);

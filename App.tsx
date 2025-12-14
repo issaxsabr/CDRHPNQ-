@@ -29,11 +29,13 @@ const ColumnConfigModal = lazy(() => import('./components/modals/ColumnConfigMod
 const CacheModal = lazy(() => import('./components/modals/CacheModal'));
 const LoadingScreen = lazy(() => import('./components/LoadingScreen'));
 const BatchProgress = lazy(() => import('./components/BatchProgress'));
+const OnboardingGuide = lazy(() => import('./components/OnboardingGuide'));
 
 
 const DEFAULT_LABELS: ColumnLabelMap = {
     name: "Entreprise",
     status: "Statut",
+    qualityScore: "Qualité",
     customField: "Memo", 
     category: "Catégorie",
     address: "Adresse",
@@ -67,7 +69,8 @@ const mergeNewResults = (currentResults: BusinessData[], newResults: BusinessDat
         socials: { ...existing.socials, ...newItem.socials },
         phone: (existing.phone && existing.phone !== 'N/A') ? existing.phone : newItem.phone,
         decisionMakers: (newItem.decisionMakers && newItem.decisionMakers.length > 0) ? newItem.decisionMakers : existing.decisionMakers,
-        customField: existing.customField || newItem.customField
+        customField: existing.customField || newItem.customField,
+        qualityScore: newItem.qualityScore || existing.qualityScore,
       };
     } else {
       updatedList.push(newItem);
@@ -121,6 +124,9 @@ const AppContent: React.FC = () => {
     excludeNoPhone: false,
     excludeDuplicates: false, onlyWithEmail: false
   });
+  
+  // Onboarding Tour State
+  const [isTourActive, setIsTourActive] = useState(false);
 
   useEffect(() => {
     checkActiveSession();
@@ -129,7 +135,8 @@ const AppContent: React.FC = () => {
     const savedLabels = localStorage.getItem('mapscraper_column_labels');
     if (savedLabels) {
         try {
-            setColumnLabels(JSON.parse(savedLabels));
+            const parsed = JSON.parse(savedLabels);
+            setColumnLabels({...DEFAULT_LABELS, ...parsed});
         } catch(e) { console.error("Failed to parse column labels from localStorage", e); }
     }
 
@@ -144,8 +151,25 @@ const AppContent: React.FC = () => {
         setSession(session);
     });
 
+    // Check if onboarding tour should run
+    const tourCompleted = localStorage.getItem('scavenger_onboarding_complete_v1');
+    if (!tourCompleted) {
+        // Start tour automatically after a short delay for the UI to mount
+        const timer = setTimeout(() => setIsTourActive(true), 1500);
+        return () => {
+            subscription.unsubscribe();
+            clearTimeout(timer);
+        }
+    }
+
     return () => subscription.unsubscribe();
   }, []);
+  
+  const startTour = () => setIsTourActive(true);
+  const endTour = () => {
+      localStorage.setItem('scavenger_onboarding_complete_v1', 'true');
+      setIsTourActive(false);
+  };
 
   const handleLogout = async () => {
       await supabase.auth.signOut();
@@ -323,13 +347,18 @@ const AppContent: React.FC = () => {
 
   const processSingleQuery = async (
       query: string, provider: ScraperProvider, serperKey: string, country: string, strategy: SerperStrategy
-  ): Promise<{ businesses: BusinessData[], rawText: string }> => {
-      const serperData = await searchWithSerper(query, serperKey, country, strategy);
+  ): Promise<{ businesses: BusinessData[], rawText: string, qualityScore?: number }> => {
+      const serperData = await searchWithSerper(
+        query, 
+        serperKey, 
+        country, 
+        strategy,
+        { enableDecisionMakerSearch: strategy === 'maps_web_enrich' }
+      );
       const geminiEnrichmentData = await enrichWithGemini(serperData, query);
       return await extractDataFromContext(query, serperData, geminiEnrichmentData);
   };
   
-  // OPTIMIZED: Dependency array minimized to prevent re-renders
   const handleSearch = useCallback(async (
       query: string, useLocation: boolean, isBatch: boolean, isSafeMode: boolean, isPaidMode: boolean,
       provider: ScraperProvider, serperKey: string, country: CountryCode, strategy: SerperStrategy, startIndex: number = 0
@@ -540,7 +569,6 @@ const AppContent: React.FC = () => {
 
   const handleClearResults = () => { stopRef.current = true; setState({ isLoading: false, isBatchMode: false, progress: { current: 0, total: 0 }, results: [], error: null, rawText: null }); setActiveProjectId(null); setDirHandle(null); };
 
-  // OPTIMIZED: Memoized filtered data to avoid recalculation on every render
   const filteredData = useMemo(() => {
     let dataToExport = [...state.results];
     if (exportFilters.excludeClosed) {
@@ -636,6 +664,7 @@ const AppContent: React.FC = () => {
         onLogout={handleLogout}
         onOpenProjectModal={() => setShowProjectModal(true)}
         onOpenCacheModal={openCacheModal}
+        onStartTour={startTour}
       />
 
       <main className="max-w-[1800px] mx-auto px-4 sm:px-6 lg:px-8 pt-28 pb-24 relative z-10">
@@ -810,6 +839,8 @@ const AppContent: React.FC = () => {
                 onToggleSelectCacheItem={toggleSelectCacheItem}
                 onToggleSelectAllCache={toggleSelectAllCache}
             />
+            
+            <OnboardingGuide isOpen={isTourActive} onClose={endTour} />
         </Suspense>
         
       </main>
