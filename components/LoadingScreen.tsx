@@ -55,8 +55,8 @@ const LoadingScreen: React.FC = () => {
                     <Sparkles className="w-16 h-16 text-white animate-spin-slow" />
                 </div>
                 
-                {/* Company name with glitch */}
-                <h1 className="text-4xl font-bold text-white mb-4 glitch-text" data-text="CDRHPNQ">
+                {/* Company name without glitch */}
+                <h1 className="text-4xl font-bold text-white mb-4">
                     CDRHPNQ
                 </h1>
                 

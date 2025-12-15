@@ -84,27 +84,43 @@ const OnboardingGuide: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ i
       target.classList.add('onboarding-highlight');
       const rect = target.getBoundingClientRect();
       const tooltipPos: TooltipPosition = {};
+      const tooltipWidth = 320; // w-80 from tailwind
+      const margin = 16;
+      const viewportWidth = document.documentElement.clientWidth;
       
+      const setHorizontalPosition = (pos: TooltipPosition) => {
+          let idealLeft = rect.left + (rect.width / 2) - (tooltipWidth / 2);
+
+          // Clamp the position within viewport bounds to prevent overflow
+          if (idealLeft < margin) {
+              idealLeft = margin;
+          }
+          if (idealLeft + tooltipWidth > viewportWidth - margin) {
+              idealLeft = viewportWidth - tooltipWidth - margin;
+          }
+
+          pos.left = `${idealLeft}px`;
+          pos.transform = 'none'; // No transform needed as we calculated the final left value
+      }
+
       switch (step.position) {
         case 'top':
-          tooltipPos.bottom = `${window.innerHeight - rect.top + 16}px`;
-          tooltipPos.left = `${rect.left + rect.width / 2}px`;
-          tooltipPos.transform = 'translateX(-50%)';
+          tooltipPos.bottom = `${window.innerHeight - rect.top + margin}px`;
+          setHorizontalPosition(tooltipPos);
           break;
         case 'left':
           tooltipPos.top = `${rect.top + rect.height / 2}px`;
-          tooltipPos.right = `${window.innerWidth - rect.left + 16}px`;
+          tooltipPos.right = `${viewportWidth - rect.left + margin}px`;
           tooltipPos.transform = 'translateY(-50%)';
           break;
         case 'right':
           tooltipPos.top = `${rect.top + rect.height / 2}px`;
-          tooltipPos.left = `${rect.right + 16}px`;
+          tooltipPos.left = `${rect.right + margin}px`;
           tooltipPos.transform = 'translateY(-50%)';
           break;
         default: // bottom
-          tooltipPos.top = `${rect.bottom + 16}px`;
-          tooltipPos.left = `${rect.left + rect.width / 2}px`;
-          tooltipPos.transform = 'translateX(-50%)';
+          tooltipPos.top = `${rect.bottom + margin}px`;
+          setHorizontalPosition(tooltipPos);
           break;
       }
       setPosition(tooltipPos);
@@ -114,7 +130,7 @@ const OnboardingGuide: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ i
     return () => {
       if (target) target.classList.remove('onboarding-highlight');
     };
-  }, [currentStep, isOpen]);
+  }, [currentStep, isOpen, step, highlightedElement]);
 
   const handleNext = () => {
     if (currentStep < STEPS.length - 1) {

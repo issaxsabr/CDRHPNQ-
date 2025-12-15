@@ -1,3 +1,4 @@
+
 // FIX: Import `useEffect` from `react` to fix 'Cannot find name' error.
 import React, { createContext, useContext, useState, useCallback, ReactNode, useEffect } from 'react';
 import { Check, AlertTriangle, X } from 'lucide-react';
@@ -56,7 +57,7 @@ const Toast: React.FC<{ toast: ToastMessage; onRemove: (id: string) => void }> =
   const isError = toast.type === 'error';
 
   return (
-    <div className={`toast-slide-in glass-indigo rounded-xl p-4 shadow-elegant max-w-sm w-full border-l-4 ${BORDER_COLORS[toast.type]} ${isError ? 'glitch' : ''}`}>
+    <div className={`toast-slide-in glass-indigo rounded-xl p-4 shadow-elegant max-w-sm w-full border-l-4 ${BORDER_COLORS[toast.type]}`}>
       <div className="flex items-start gap-3">
         <div className={isError ? 'animate-shake' : 'animate-bounce'}>
           <div className={`w-10 h-10 ${ICON_BG_COLORS[toast.type]} rounded-full flex items-center justify-center`}>
@@ -66,8 +67,7 @@ const Toast: React.FC<{ toast: ToastMessage; onRemove: (id: string) => void }> =
         
         <div className="flex-1 pt-1">
           <h4 
-            className={`font-bold text-slate-800 mb-0.5 ${isError ? 'glitch-text' : ''}`}
-            data-text={toast.title}
+            className="font-bold text-slate-800 mb-0.5"
           >
             {toast.title}
           </h4>
