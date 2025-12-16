@@ -12,11 +12,60 @@ body {
 
 /* --- ACCESSIBILITY IMPROVEMENTS --- */
 
-/* Indicateurs focus visibles */
+/* Indicateurs focus visibles globaux */
 *:focus-visible {
   outline: 2px solid #FCC036; /* gold-500 */
   outline-offset: 2px;
   border-radius: 4px;
+}
+
+/* Focus spécifique pour les boutons */
+button:focus-visible,
+[role="button"]:focus-visible {
+  outline: 2px solid #FCC036;
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px rgba(252, 192, 54, 0.25);
+}
+
+/* Focus spécifique pour les liens */
+a:focus-visible {
+  outline: 2px solid #FCC036;
+  outline-offset: 2px;
+  text-decoration: underline;
+}
+
+/* Focus spécifique pour les inputs */
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: none;
+  border-color: #FCC036;
+  box-shadow: 0 0 0 3px rgba(252, 192, 54, 0.25);
+}
+
+/* Désactiver outline par défaut sur les éléments cliquables */
+button:focus:not(:focus-visible),
+a:focus:not(:focus-visible),
+[role="button"]:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* Réduire les animations si l'utilisateur le préfère */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Amélioration du contraste pour le mode forcé */
+@media (forced-colors: active) {
+  *:focus-visible {
+    outline: 3px solid CanvasText;
+  }
 }
 
 /* Skip to content link */

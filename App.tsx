@@ -611,12 +611,47 @@ const AppContent: React.FC = () => {
       generateInteractiveHTML(filteredData, projName);
   }, [filteredData, activeProjectId, projects, generateInteractiveHTML]);
 
+  // Optimisation: calcul des stats en une seule passe au lieu de 4
   const stats = useMemo(() => {
-      const actives = state.results.filter(r => (r.status?.toLowerCase().includes('activ') || r.status?.toLowerCase().includes('ouvert') || r.status?.toLowerCase().includes('web') || r.status?.toLowerCase().includes('trouvé') || r.status?.toLowerCase().includes('(cache)'))).length;
-      const closed = state.results.filter(r => (r.status?.toLowerCase().includes('définitiv') || r.status?.toLowerCase().includes('permanent'))).length;
-      const warnings = state.results.filter(r => (r.status?.toLowerCase().includes('ferm') || r.status?.toLowerCase().includes('doublon') || r.status?.toLowerCase().includes('ignoré') || r.status?.toLowerCase().includes('erreur'))).length;
-      const emails = state.results.filter(r => r.email && r.email.trim() !== '').length;
-      return { actives, closed, warnings, emails };
+    return state.results.reduce(
+      (acc, r) => {
+        const status = r.status?.toLowerCase() || '';
+
+        // Actifs
+        if (
+          status.includes('activ') ||
+          status.includes('ouvert') ||
+          status.includes('web') ||
+          status.includes('trouvé') ||
+          status.includes('(cache)')
+        ) {
+          acc.actives++;
+        }
+
+        // Fermés définitivement
+        if (status.includes('définitiv') || status.includes('permanent')) {
+          acc.closed++;
+        }
+
+        // Avertissements
+        if (
+          status.includes('ferm') ||
+          status.includes('doublon') ||
+          status.includes('ignoré') ||
+          status.includes('erreur')
+        ) {
+          acc.warnings++;
+        }
+
+        // Avec email
+        if (r.email && r.email.trim() !== '') {
+          acc.emails++;
+        }
+
+        return acc;
+      },
+      { actives: 0, closed: 0, warnings: 0, emails: 0 }
+    );
   }, [state.results]);
 
   if (authLoading) { return ( <Suspense fallback={<div className="fixed inset-0 bg-earth-900" />}><LoadingScreen /></Suspense> ); }
