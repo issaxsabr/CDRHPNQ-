@@ -1,4 +1,3 @@
-
 import React, { useState, useCallback, useEffect, useMemo, lazy, Suspense } from 'react';
 import { Session } from '@supabase/supabase-js';
 import { Info, StopCircle, Clock, Zap, Sparkles, Filter, Check, PlayCircle, X, FileJson, AlertOctagon, RotateCw, HardDrive, TableProperties, FileCode, FileSpreadsheet, Loader2, AlertTriangle } from 'lucide-react';
@@ -8,12 +7,13 @@ import AuthOverlay from './components/AuthOverlay';
 import Header from './components/Header';
 import DashboardStats from './components/DashboardStats';
 import { ToastProvider, useToast } from './contexts/ToastContext';
+import Button from './components/ui/Button';
 
 import { supabase } from './services/supabase';
 import { extractDataFromContext, enrichWithGemini } from './services/gemini';
 import { searchWithSerper } from './services/serper';
 import { cacheService, projectService, blacklistService } from './services/storage';
-import { BusinessData, ScraperState, ScraperProvider, CountryCode, SavedSession, SerperStrategy, Project, ColumnLabelMap } from './types';
+import { BusinessData, ScraperState, ScraperProvider, CountryCode, SavedSession, SerperStrategy, Project, ColumnLabelMap, ProjectStatus } from './types';
 import { getInteractiveHTMLContent, exportToExcel } from './utils/exportUtils';
 import { validateAndSanitize } from './utils/validation';
 import { z } from 'zod';
@@ -59,7 +59,8 @@ const mergeNewResults = (currentResults: BusinessData[], newResults: BusinessDat
       const existing = updatedList[existingIndex];
       updatedList[existingIndex] = {
         ...existing,
-        status: (existing.status === 'Introuvable' || existing.status === 'Erreur' || existing.status === 'Non trouvé') ? newItem.status : existing.status,
+        status: (existing.status === ProjectStatus.NOT_FOUND || existing.status === ProjectStatus.ERROR) ? newItem.status : existing.status,
+        statusLabel: newItem.statusLabel || existing.statusLabel,
         address: (existing.address && existing.address !== 'N/A') ? existing.address : newItem.address,
         hours: (existing.hours && existing.hours !== 'N/A') ? existing.hours : newItem.hours,
         website: existing.website || newItem.website,
@@ -371,7 +372,7 @@ const AppContent: React.FC = () => {
       
       const cached = await cacheService.get(query);
       if (cached) {
-          const newResult = { ...cached, status: cached.status + " (Cache)" };
+          const newResult = { ...cached, status: ProjectStatus.CACHED, statusLabel: "Depuis Cache" };
           setState(prev => ({ ...prev, isLoading: false, results: mergeNewResults(prev.results, [newResult]), error: null }));
           await projectService.addResultsToProject(activeProjectId, [newResult]);
           await loadProjects();
@@ -397,9 +398,11 @@ const AppContent: React.FC = () => {
 
             if(resultStatus.status === 'duplicate') {
                 const projName = await projectService.getProjectName(resultStatus.duplicateProjectId || '');
-                item.status = `Doublon (Dossier: ${projName})`;
+                item.status = ProjectStatus.DUPLICATE;
+                item.statusLabel = `Doublon (Dossier: ${projName})`;
             } else if (resultStatus.status === 'blacklisted') {
                 item.status = resultStatus.item.status;
+                item.statusLabel = resultStatus.item.statusLabel;
             }
 
             await loadProjects();
@@ -447,7 +450,7 @@ const AppContent: React.FC = () => {
                 const { businesses } = await processSingleQuery(line, provider, serperKey, country, strategy);
                 return { success: true, data: businesses[0], fromCache: false };
             } catch (e: any) {
-                return { success: false, data: { name: line, status: "Erreur", address: e.message || "Erreur technique", phone: "", hours: "", searchedTerm: line } as BusinessData };
+                return { success: false, data: { name: line, status: ProjectStatus.ERROR, statusLabel: e.message || "Erreur technique", address: "", phone: "", hours: "", searchedTerm: line } as BusinessData };
             }
         });
 
@@ -458,20 +461,28 @@ const AppContent: React.FC = () => {
             const realApiCallCount = batchResults.filter(r => !r.fromCache && r.success).length;
             if (realApiCallCount > 0) updateQuotaUsed(realApiCallCount * costPerQuery);
             
-            const resultsToProcess = batchResults.map(res => res.success && res.data ? res.data : (res.data || null)).filter(Boolean) as BusinessData[];
+            const resultsToProcess = batchResults.map(res => {
+                if (res.fromCache && res.data) {
+                    return {...res.data, status: ProjectStatus.CACHED, statusLabel: "Depuis Cache" };
+                }
+                return res.success && res.data ? res.data : (res.data || null)
+            }).filter(Boolean) as BusinessData[];
+
             const dbAddResults = await projectService.addResultsToProject(activeProjectId, resultsToProcess);
             
             const projectNames: Record<string, string> = {};
 
-            const finalResults = await Promise.all(dbAddResults.map(async (res, index) => {
+            const finalResults = await Promise.all(dbAddResults.map(async (res) => {
                 if (res.status === 'duplicate' && res.duplicateProjectId && !projectNames[res.duplicateProjectId]) {
                     projectNames[res.duplicateProjectId] = await projectService.getProjectName(res.duplicateProjectId);
                 }
                 if(res.status === 'duplicate') {
-                   res.item.status = `Doublon (Dossier: ${projectNames[res.duplicateProjectId || ''] || 'Inconnu'})`;
+                   res.item.status = ProjectStatus.DUPLICATE;
+                   res.item.statusLabel = `Doublon (Dossier: ${projectNames[res.duplicateProjectId || ''] || 'Inconnu'})`;
                 }
-                // FIX: Correlate with `batchResults` using index to check `fromCache` property.
-                if (batchResults[index]?.fromCache === false && res.status === 'added') await cacheService.set(res.item.searchedTerm || res.item.name, res.item);
+                if (res.status === 'added' && res.item.searchedTerm && !res.item.statusLabel?.includes("Cache")) {
+                    await cacheService.set(res.item.searchedTerm, res.item);
+                }
                 return res.item;
             }));
 
@@ -538,7 +549,7 @@ const AppContent: React.FC = () => {
 
   const filteredData = useMemo(() => {
     let dataToExport = [...state.results];
-    if (exportFilters.excludeClosed) dataToExport = dataToExport.filter(r => !r.status?.toLowerCase().includes('ferm') && !r.status?.toLowerCase().includes('définitiv'));
+    if (exportFilters.excludeClosed) dataToExport = dataToExport.filter(r => r.status !== ProjectStatus.CLOSED && r.status !== ProjectStatus.PERMANENTLY_CLOSED);
     if (exportFilters.excludeNoPhone) dataToExport = dataToExport.filter(r => r.phone && r.phone !== 'N/A' && r.phone.trim() !== '');
     if (exportFilters.onlyWithEmail) dataToExport = dataToExport.filter(r => r.email && r.email.trim() !== '');
     if (exportFilters.excludeDuplicates) {
@@ -575,45 +586,45 @@ const AppContent: React.FC = () => {
   }, [filteredData, activeProjectId, projects, generateInteractiveHTML]);
 
   const stats = useMemo(() => {
-      const actives = state.results.filter(r => (r.status?.toLowerCase().includes('activ') || r.status?.toLowerCase().includes('ouvert') || r.status?.toLowerCase().includes('web') || r.status?.toLowerCase().includes('trouvé') || r.status?.toLowerCase().includes('(cache)'))).length;
-      const closed = state.results.filter(r => (r.status?.toLowerCase().includes('définitiv') || r.status?.toLowerCase().includes('permanent'))).length;
-      const warnings = state.results.filter(r => (r.status?.toLowerCase().includes('ferm') || r.status?.toLowerCase().includes('doublon') || r.status?.toLowerCase().includes('ignoré') || r.status?.toLowerCase().includes('erreur'))).length;
+      const actives = state.results.filter(r => r.status === ProjectStatus.ACTIVE || r.status === ProjectStatus.FOUND || r.status === ProjectStatus.CACHED).length;
+      const closed = state.results.filter(r => r.status === ProjectStatus.PERMANENTLY_CLOSED).length;
+      const warnings = state.results.filter(r => [ProjectStatus.CLOSED, ProjectStatus.DUPLICATE, ProjectStatus.IGNORED, ProjectStatus.ERROR, ProjectStatus.WARNING].includes(r.status)).length;
       const emails = state.results.filter(r => r.email && r.email.trim() !== '').length;
       return { actives, closed, warnings, emails };
   }, [state.results]);
 
-  if (authLoading) { return ( <Suspense fallback={<div className="fixed inset-0 bg-slate-900" />}><LoadingScreen /></Suspense> ); }
+  if (authLoading) { return ( <Suspense fallback={<div className="fixed inset-0 bg-earth-900" />}><LoadingScreen /></Suspense> ); }
   if (!session) { return ( <div className="relative min-h-screen"> <div className="absolute inset-0 bg-slate-100 blur-sm z-0"></div> <AuthOverlay onLoginSuccess={() => setAuthLoading(false)} /> </div> ); }
 
   return (
-    <div className="min-h-screen font-sans text-slate-800">
+    <div className="min-h-screen font-sans text-earth-900">
       
       <Header projectCount={projects.length} historyCount={historyCount} onLogout={handleLogout} onOpenProjectModal={() => setShowProjectModal(true)} onOpenCacheModal={openCacheModal} onStartTour={startTour} />
 
-      <main className="max-w-[1800px] mx-auto px-4 sm:px-6 lg:px-8 pt-28 pb-24 relative z-10">
+      <main className="max-w-[1800px] mx-auto px-4 sm:px-6 lg:px-8 pt-28 pb-24 relative z-[var(--z-base)]">
         
         {activeSession && !state.isLoading && (
-            <div className="mb-8 p-4 rounded-xl bg-white border border-indigo-100 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 animate-fade-in-up shadow-lg shadow-indigo-100/50">
+            <div className="mb-8 p-4 rounded-xl bg-white border border-amber-100 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 animate-fade-in-up shadow-lg shadow-amber-100/50">
                 <div className="flex items-start gap-3">
-                    <div className="p-2 bg-indigo-50 rounded-lg text-indigo-600"><PlayCircle className="w-5 h-5" /></div>
+                    <div className="p-2 bg-amber-50 rounded-lg text-amber-600"><PlayCircle className="w-5 h-5" /></div>
                     <div>
-                        <h3 className="text-sm font-bold text-slate-900">Session précédente détectée</h3>
+                        <h3 className="text-sm font-bold text-earth-900">Session précédente détectée</h3>
                         <p className="text-xs text-slate-500 mt-0.5">Reprendre là où vous vous êtes arrêté ?</p>
                     </div>
                 </div>
                 <div className="flex items-center gap-3 w-full sm:w-auto">
-                    <button onClick={discardSession} className="flex-1 sm:flex-none px-4 py-2 text-xs font-medium text-slate-500 hover:bg-slate-50 rounded-lg transition-colors">Ignorer</button>
-                    <button onClick={resumeSession} className="flex-1 sm:flex-none px-5 py-2 text-xs font-semibold text-white bg-indigo-600 rounded-lg btn-modern flex items-center justify-center gap-2"><Zap className="w-3.5 h-3.5" /> Reprendre</button>
+                    <Button onClick={discardSession} variant="ghost" size="sm">Ignorer</Button>
+                    <Button onClick={resumeSession} size="sm" leftIcon={<Zap className="w-3.5 h-3.5" />}>Reprendre</Button>
                 </div>
             </div>
         )}
 
         <div className="text-center mb-12 animate-scale-in">
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full border border-indigo-100 bg-indigo-50 text-indigo-700 text-[11px] font-bold uppercase tracking-wider mb-4 shadow-sm">
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full border border-amber-100 bg-amber-50 text-amber-700 text-[11px] font-bold uppercase tracking-wider mb-4 shadow-sm">
             <Sparkles className="w-3 h-3 animate-float" />
             Vérification Instantanée
           </div>
-          <h2 className="text-4xl sm:text-5xl font-bold text-slate-900 mb-4 tracking-tight">
+          <h2 className="text-4xl sm:text-5xl font-bold text-earth-900 mb-4 tracking-tight">
             Statut d'entreprise
           </h2>
         </div>
@@ -639,23 +650,21 @@ const AppContent: React.FC = () => {
 
             <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-6 px-2 mb-4 animate-fade-in">
               <div className="flex items-center gap-3">
-                <h3 className="text-lg font-semibold text-slate-800 flex items-center gap-3">
-                  <span className="flex items-center justify-center w-7 h-7 bg-slate-900 text-white rounded-full text-xs font-bold shadow-md">{filteredData.length}</span>
+                <h3 className="text-lg font-semibold text-earth-900 flex items-center gap-3">
+                  <span className="flex items-center justify-center w-7 h-7 bg-earth-900 text-white rounded-full text-xs font-bold shadow-md">{filteredData.length}</span>
                   Résultats {activeProjectId ? '(Sauvegardé)' : '(Temp)'}
                 </h3>
                 {activeProjectId && (
                     <div className="flex items-center gap-2">
                          {!dirHandle ? (
                             hasStoredHandle ? (
-                                <button onClick={restoreFolderConnection} className="flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold text-indigo-600 bg-indigo-50 border border-indigo-200 rounded-lg shadow-sm hover:bg-indigo-100 transition-colors animate-pulse" title="Restaurer l'accès au dossier local pour ce projet">
-                                    <RotateCw className="w-3 h-3" />
+                                <Button onClick={restoreFolderConnection} variant="outline" size="sm" leftIcon={<RotateCw className="w-3 h-3" />} className="text-amber-600 bg-amber-50 border-amber-200 hover:bg-amber-100 animate-pulse" title="Restaurer l'accès au dossier local pour ce projet">
                                     <span className="hidden sm:inline">Reconnecter Dossier</span>
-                                </button>
+                                </Button>
                             ) : (
-                                <button onClick={handleConnectLocalFolder} className="flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold text-slate-500 bg-white border border-slate-200 rounded-lg shadow-sm hover:text-indigo-600 hover:border-indigo-300 transition-colors" title="Lier un dossier local à ce projet pour la sauvegarde auto">
-                                    <HardDrive className="w-3 h-3" />
+                                <Button onClick={handleConnectLocalFolder} variant="outline" size="sm" leftIcon={<HardDrive className="w-3 h-3" />} title="Lier un dossier local à ce projet pour la sauvegarde auto">
                                     <span className="hidden sm:inline">Connecter Dossier Local</span>
-                                </button>
+                                </Button>
                             )
                          ) : (
                              <div className="flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold text-emerald-600 bg-emerald-50 border border-emerald-200 rounded-lg shadow-sm" title="Sauvegarde active toutes les 5 minutes">
@@ -666,14 +675,13 @@ const AppContent: React.FC = () => {
                          )}
                     </div>
                 )}
-                <button onClick={handleClearResults} title="Fermer la vue" aria-label="Fermer la vue des résultats" className="p-2 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-rose-50 transition-colors"><X className="w-4 h-4" /></button>
+                <Button onClick={handleClearResults} variant="ghost" size="sm" title="Fermer la vue" aria-label="Fermer la vue des résultats" className="text-slate-400 hover:text-rose-500"><X className="w-4 h-4" /></Button>
               </div>
               
               <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center bg-white p-2 rounded-xl border border-slate-200 shadow-sm w-full xl:w-auto">
-                <button onClick={() => setShowColumnModal(true)} className="flex items-center gap-2 px-3 py-2 text-xs font-medium text-slate-600 hover:bg-slate-50 rounded-lg transition-colors border border-transparent hover:border-slate-200">
-                    <TableProperties className="w-3.5 h-3.5" />
+                <Button onClick={() => setShowColumnModal(true)} variant="ghost" size="sm" leftIcon={<TableProperties className="w-3.5 h-3.5" />}>
                     <span className="hidden sm:inline">Colonnes</span>
-                </button>
+                </Button>
 
                 <div className="w-px h-6 bg-slate-200 hidden sm:block mx-1"></div>
 
@@ -681,12 +689,12 @@ const AppContent: React.FC = () => {
                 <div className="flex flex-wrap gap-2">
                     <button onClick={() => setExportFilters(prev => ({ ...prev, excludeClosed: !prev.excludeClosed }))} className={`px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-all border flex items-center gap-1.5 ${exportFilters.excludeClosed ? 'bg-rose-50 border-rose-200 text-rose-600' : 'bg-slate-50 border-slate-100 text-slate-500 hover:bg-white hover:border-slate-300'}`}>{exportFilters.excludeClosed ? <Check className="w-3 h-3" /> : <div className="w-3 h-3" />}Actifs</button>
                     <button onClick={() => setExportFilters(prev => ({ ...prev, excludeNoPhone: !prev.excludeNoPhone }))} className={`px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-all border flex items-center gap-1.5 ${exportFilters.excludeNoPhone ? 'bg-amber-50 border-amber-200 text-amber-600' : 'bg-slate-50 border-slate-100 text-slate-500 hover:bg-white hover:border-slate-300'}`}>{exportFilters.excludeNoPhone ? <Check className="w-3 h-3" /> : <div className="w-3 h-3" />}Avec Tél</button>
-                    <button onClick={() => setExportFilters(prev => ({ ...prev, onlyWithEmail: !prev.onlyWithEmail }))} className={`px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-all border flex items-center gap-1.5 ${exportFilters.onlyWithEmail ? 'bg-indigo-50 border-indigo-200 text-indigo-600' : 'bg-slate-50 border-slate-100 text-slate-500 hover:bg-white hover:border-slate-300'}`}>{exportFilters.onlyWithEmail ? <Check className="w-3 h-3" /> : <div className="w-3 h-3" />}Avec Email</button>
+                    <button onClick={() => setExportFilters(prev => ({ ...prev, onlyWithEmail: !prev.onlyWithEmail }))} className={`px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-all border flex items-center gap-1.5 ${exportFilters.onlyWithEmail ? 'bg-amber-50 border-amber-200 text-amber-600' : 'bg-slate-50 border-slate-100 text-slate-500 hover:bg-white hover:border-slate-300'}`}>{exportFilters.onlyWithEmail ? <Check className="w-3 h-3" /> : <div className="w-3 h-3" />}Avec Email</button>
                 </div>
                 <div className="flex items-center gap-2 ml-auto">
-                    <button onClick={downloadHTML} className="group flex items-center gap-2 px-3 py-2 text-xs font-bold text-slate-600 bg-slate-50 hover:bg-white rounded-lg border border-slate-200 shadow-sm hover-lift" title="Télécharger Mini-App HTML autonome"><FileCode className="w-3.5 h-3.5" /></button>
-                    <button onClick={downloadJSON} className="group flex items-center gap-2 px-3 py-2 text-xs font-bold text-slate-600 bg-slate-50 hover:bg-white rounded-lg border border-slate-200 shadow-sm hover-lift" title="Télécharger JSON"><FileJson className="w-3.5 h-3.5" /></button>
-                    <button onClick={downloadExcel} className="group flex items-center gap-2 px-4 py-2 text-xs font-bold text-white bg-indigo-600 rounded-lg btn-modern whitespace-nowrap"><FileSpreadsheet className="w-3.5 h-3.5 group-hover:animate-bounce" /> Excel</button>
+                    <Button onClick={downloadHTML} variant="outline" size="sm" title="Télécharger Mini-App HTML autonome"><FileCode className="w-3.5 h-3.5" /></Button>
+                    <Button onClick={downloadJSON} variant="outline" size="sm" title="Télécharger JSON"><FileJson className="w-3.5 h-3.5" /></Button>
+                    <Button onClick={downloadExcel} variant="primary" size="sm" leftIcon={<FileSpreadsheet className="w-3.5 h-3.5 group-hover:animate-bounce" />} className="whitespace-nowrap">Excel</Button>
                 </div>
               </div>
             </div>
@@ -694,7 +702,7 @@ const AppContent: React.FC = () => {
             <ResultTable data={filteredData} onUpdate={handleUpdateResult} columnLabels={columnLabels} />
 
             <div className="mt-8 p-4 rounded-xl bg-white border border-slate-200 text-xs text-slate-500 flex items-start gap-3 max-w-2xl mx-auto shadow-sm animate-fade-in">
-               <Info className="w-4 h-4 mt-0.5 shrink-0 text-indigo-500" />
+               <Info className="w-4 h-4 mt-0.5 shrink-0 text-amber-500" />
                <div className="space-y-1">
                  <p>Les données sont enregistrées automatiquement en local. Aucune donnée ne transite vers nos serveurs.</p>
                </div>

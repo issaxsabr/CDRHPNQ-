@@ -1,6 +1,5 @@
-
 import { supabase } from './supabase';
-import { BusinessData, ContactPerson } from "../types";
+import { BusinessData, ContactPerson, ProjectStatus } from "../types";
 import { SerperOptimizedResult } from './serper';
 
 // HELPER FUNCTIONS (conservées de l'ancienne version)
@@ -79,6 +78,16 @@ const extractEmailsWithQuality = (text: string): { email: string; quality: numbe
         return { email, quality };
     }).sort((a, b) => b.quality - a.quality);
 };
+
+const mapStringToStatus = (text: string): { status: ProjectStatus, statusLabel?: string } => {
+    const s = text.toLowerCase();
+    if (s.includes('définitiv') || s.includes('permanent')) return { status: ProjectStatus.PERMANENTLY_CLOSED };
+    if (s.includes('ferm')) return { status: ProjectStatus.CLOSED, statusLabel: text };
+    if (s.includes('activ') || s.includes('ouvert')) return { status: ProjectStatus.ACTIVE };
+    if (s.includes('web') || s.includes('trouvé')) return { status: ProjectStatus.FOUND, statusLabel: text };
+    if (s.includes('introuvable') || s.includes('non trouvé')) return { status: ProjectStatus.NOT_FOUND };
+    return { status: ProjectStatus.CHECKING, statusLabel: text };
+}
 
 export const enrichWithGemini = async (context: SerperOptimizedResult, query: string): Promise<any> => {
     const textContext = [
@@ -212,9 +221,11 @@ export const extractDataFromContext = async (
     geminiData?: any,
 ): Promise<{ businesses: BusinessData[]; rawText: string; qualityScore: number }> => {
 
+    const { status, statusLabel } = mapStringToStatus("Non trouvé");
     let business: BusinessData = {
         name: query,
-        status: "Non trouvé",
+        status: status,
+        statusLabel: statusLabel,
         address: "N/A",
         phone: "N/A",
         hours: "N/A",
@@ -238,7 +249,11 @@ export const extractDataFromContext = async (
         business.website = place.website || "";
         business.category = place.type || place.category || "";
         business.hours = place.openingHours ? formatOpeningHours(place.openingHours) : "Voir Fiche Maps";
-        business.status = (place.title && (place.title.toLowerCase().includes('closed') || place.title.toLowerCase().includes('fermé'))) ? "Fermé (Voir Fiche)" : "En activité";
+        const placeStatus = (place.title && (place.title.toLowerCase().includes('closed') || place.title.toLowerCase().includes('fermé'))) ? "Fermé (Voir Fiche)" : "En activité";
+        const mappedStatus = mapStringToStatus(placeStatus);
+        business.status = mappedStatus.status;
+        business.statusLabel = mappedStatus.statusLabel;
+
         business.sourceUri = place.cid ? `https://maps.google.com/?cid=${place.cid}` : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(business.name + " " + business.address)}`;
         qualityScore += 30;
     } 
@@ -247,7 +262,10 @@ export const extractDataFromContext = async (
     else if (knowledgeGraph || organic.length > 0) {
         const source = knowledgeGraph || organic[0];
         business.name = source.title || query;
-        business.status = knowledgeGraph ? "Fiche Google trouvée" : "Site Web Trouvé";
+        const webStatus = knowledgeGraph ? "Fiche Google trouvée" : "Site Web Trouvé";
+        const mappedStatus = mapStringToStatus(webStatus);
+        business.status = mappedStatus.status;
+        business.statusLabel = mappedStatus.statusLabel;
         business.website = source.website || (organic[0] ? organic[0].link : "");
         business.category = source.type || business.category;
         business.sourceUri = organic.length > 0 ? organic[0].link : business.sourceUri;

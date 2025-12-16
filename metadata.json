@@ -1,6 +1,6 @@
 {
-  "name": "CDRHPNQ Scavenger 0.9",
-  "description": "Outil d'extraction de données d'entreprises via Google Maps. Rapide, légal et économique.",
+  "name": "CDRHPNQ Scavenger 2.0",
+  "description": "Plateforme professionnelle de vérification et d'enrichissement de données B2B.",
   "requestFramePermissions": [
     "geolocation"
   ]

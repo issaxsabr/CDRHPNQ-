@@ -1,6 +1,5 @@
-
 import { getDB } from './database';
-import { BusinessData, Project } from '../types';
+import { BusinessData, Project, ProjectStatus } from '../types';
 import { securePack, secureUnpack } from './security';
 import { SmartCache } from './smartCache';
 
@@ -104,7 +103,7 @@ export const projectService = {
     for (const item of newResults) {
         const blCheck = blacklistService.isBlacklisted(item);
         if (blCheck.isBlacklisted) {
-            statusResults.push({ status: 'blacklisted', item: { ...item, status: `Ignoré: ${blCheck.reason}` } });
+            statusResults.push({ status: 'blacklisted', item: { ...item, status: ProjectStatus.IGNORED, statusLabel: blCheck.reason } });
             continue;
         }
 
@@ -130,7 +129,7 @@ export const projectService = {
                 statusResults.push({ status: 'duplicate', item, duplicateProjectId: existing?.projectId });
             } else {
                 console.error("Erreur d'ajout à la DB:", e);
-                statusResults.push({ status: 'error', item });
+                statusResults.push({ status: 'error', item: {...item, status: ProjectStatus.ERROR, statusLabel: e.message} });
             }
         }
     }

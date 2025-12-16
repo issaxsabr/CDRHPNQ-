@@ -1,7 +1,7 @@
-
 import React, { useState } from 'react';
 import { supabase } from '../services/supabase';
 import { Lock, Mail, ArrowRight, Loader2, ShieldCheck, AlertTriangle } from 'lucide-react';
+import Button from './ui/Button';
 
 interface AuthOverlayProps {
     onLoginSuccess: () => void;
@@ -31,8 +31,6 @@ const AuthOverlay: React.FC<AuthOverlayProps> = ({ onLoginSuccess }) => {
             const { error } = await supabase.auth.signInWithOtp({
                 email,
                 options: {
-                    // Important : Si vous avez désactivé les inscriptions publiques (Allow new user signups = OFF)
-                    // mais ajouté des utilisateurs manuellement, 'shouldCreateUser: false' est correct.
                     shouldCreateUser: false, 
                 }
             });
@@ -87,19 +85,14 @@ const AuthOverlay: React.FC<AuthOverlayProps> = ({ onLoginSuccess }) => {
                 });
                 
                 if (retry.error) {
-                    // Si les deux échouent, on lance l'erreur initiale
                     throw error;
                 } else {
-                    // Succès au 2ème essai
                     error = null;
                     data = retry.data;
                 }
             }
 
             if (error) throw error;
-
-            // La session est gérée automatiquement par onAuthStateChange dans App.tsx, 
-            // mais on appelle onLoginSuccess pour fermer l'overlay immédiatement si besoin.
             onLoginSuccess();
             
         } catch (err: any) {
@@ -113,17 +106,17 @@ const AuthOverlay: React.FC<AuthOverlayProps> = ({ onLoginSuccess }) => {
     };
 
     return (
-        <div className="fixed inset-0 z-[100] bg-[#403E37]/50 backdrop-blur-sm flex items-center justify-center p-4">
-            <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden animate-scale-in glass">
+        <div className="fixed inset-0 z-[var(--z-modal-backdrop)] bg-earth-900/50 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden animate-scale-in glass-light">
                 {/* Header */}
                 <div className="bg-slate-50/50 border-b border-slate-100 p-6 flex flex-col items-center text-center">
-                    <div className="w-12 h-12 bg-yellow-100 text-yellow-600 rounded-xl flex items-center justify-center mb-3 shadow-inner">
+                    <div className="w-12 h-12 bg-gold-500/20 text-gold-600 rounded-xl flex items-center justify-center mb-3 shadow-inner">
                         {step === 'email' ? <Lock className="w-6 h-6" /> : <ShieldCheck className="w-6 h-6" />}
                     </div>
-                    <h2 className="text-xl font-bold text-slate-800 gradient-text">
+                    <h2 className="text-xl font-bold text-earth-900 gradient-text">
                         {step === 'email' ? 'Espace de Connexion' : 'Vérification OTP'}
                     </h2>
-                    <p className="text-sm text-[#8B865F] mt-1">
+                    <p className="text-sm text-earth-500 mt-1">
                         {step === 'email' 
                             ? 'Identification par courriel requise' 
                             : `Entrez le code envoyé à ${email}`}
@@ -142,7 +135,7 @@ const AuthOverlay: React.FC<AuthOverlayProps> = ({ onLoginSuccess }) => {
                     {step === 'email' ? (
                         <form onSubmit={handleSendOtp} className="space-y-4">
                             <div className="space-y-1.5">
-                                <label className="text-xs font-bold text-[#403E37] uppercase tracking-wider">Email professionnel</label>
+                                <label className="text-xs font-bold text-earth-900 uppercase tracking-wider">Email professionnel</label>
                                 <div className="relative">
                                     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
                                         <Mail className="w-4 h-4" />
@@ -153,23 +146,24 @@ const AuthOverlay: React.FC<AuthOverlayProps> = ({ onLoginSuccess }) => {
                                         autoFocus
                                         value={email}
                                         onChange={(e) => setEmail(e.target.value)}
-                                        className="w-full pl-10 pr-4 py-2.5 bg-slate-50/50 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-yellow-100 focus:border-yellow-500 transition-all text-[#403E37] text-sm font-medium placeholder-slate-400"
+                                        className="w-full pl-10 pr-4 py-2.5 bg-slate-50/50 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-gold-500/50 focus:border-gold-500 transition-all text-earth-900 text-sm font-medium placeholder-slate-400"
                                         placeholder="nom@entreprise.com"
                                     />
                                 </div>
                             </div>
-                            <button 
+                            <Button 
                                 type="submit" 
-                                disabled={loading}
-                                className="w-full bg-black text-white font-semibold py-2.5 rounded-lg transition-all flex items-center justify-center gap-2 disabled:bg-slate-300 disabled:cursor-not-allowed btn-modern"
+                                isLoading={loading}
+                                rightIcon={<ArrowRight className="w-4 h-4" />}
+                                className="w-full"
                             >
-                                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <>Recevoir le code <ArrowRight className="w-4 h-4" /></>}
-                            </button>
+                                Recevoir le code
+                            </Button>
                         </form>
                     ) : (
                         <form onSubmit={handleVerifyOtp} className="space-y-4">
                             <div className="space-y-1.5">
-                                <label className="text-xs font-bold text-[#403E37] uppercase tracking-wider">Code reçu par email</label>
+                                <label className="text-xs font-bold text-earth-900 uppercase tracking-wider">Code reçu par email</label>
                                 <input 
                                     type="text" 
                                     inputMode="numeric"
@@ -180,22 +174,23 @@ const AuthOverlay: React.FC<AuthOverlayProps> = ({ onLoginSuccess }) => {
                                     maxLength={8}
                                     value={otp}
                                     onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
-                                    className="w-full px-4 py-3 bg-slate-50/50 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-yellow-100 focus:border-yellow-500 transition-all text-[#403E37] text-center text-2xl font-mono tracking-[0.2em] placeholder-slate-300"
+                                    className="w-full px-4 py-3 bg-slate-50/50 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-gold-500/50 focus:border-gold-500 transition-all text-earth-900 text-center text-2xl font-mono tracking-[0.2em] placeholder-slate-300"
                                     placeholder="000000"
                                 />
                                 <p className="text-[10px] text-center text-slate-400">Vérifiez vos spams si vous ne recevez rien.</p>
                             </div>
-                            <button 
+                            <Button 
                                 type="submit" 
-                                disabled={loading || otp.length < 6}
-                                className="w-full bg-black text-white font-semibold py-2.5 rounded-lg transition-all flex items-center justify-center gap-2 disabled:bg-slate-300 disabled:cursor-not-allowed btn-modern"
+                                disabled={otp.length < 6}
+                                isLoading={loading}
+                                className="w-full"
                             >
-                                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Confirmer le code'}
-                            </button>
+                                Confirmer le code
+                            </Button>
                             <button 
                                 type="button" 
                                 onClick={() => { setStep('email'); setError(null); setOtp(''); }}
-                                className="w-full text-xs text-slate-500 hover:text-yellow-600 mt-2 py-1"
+                                className="w-full text-xs text-slate-500 hover:text-gold-600 mt-2 py-1"
                             >
                                 Modifier l'email
                             </button>

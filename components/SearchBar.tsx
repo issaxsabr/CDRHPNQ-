@@ -1,7 +1,7 @@
-
 import React, { useState, useRef } from 'react';
 import { Search, MapPin, Loader2, Database, Zap, Settings, Globe, ChevronDown, Sparkles, FileText, Eraser, DollarSign, Map, Search as SearchIcon, Folder, FolderPlus, Info, UploadCloud, PieChart, Command, X, Check, FolderOpen, Server, ShieldCheck, UserSearch } from 'lucide-react';
 import { ScraperProvider, CountryCode, SerperStrategy, Project } from '../types';
+import Button from './ui/Button';
 
 interface SearchBarProps {
   onSearch: (
@@ -161,7 +161,7 @@ const SearchBar: React.FC<SearchBarProps> = ({
 
   // Calculation for Quota bar
   const quotaPercent = Math.min((quotaUsed / Math.max(quotaLimit, 1)) * 100, 100);
-  const quotaColor = quotaPercent > 90 ? 'bg-rose-500' : quotaPercent > 70 ? 'bg-amber-500' : 'bg-indigo-600';
+  const quotaColor = quotaPercent > 90 ? 'bg-rose-500' : quotaPercent > 70 ? 'bg-amber-500' : 'bg-amber-600';
 
   return (
     <div className="w-full max-w-4xl mx-auto mb-10 relative z-10 animate-scale-in">
@@ -175,8 +175,8 @@ const SearchBar: React.FC<SearchBarProps> = ({
                 disabled={isLoading}
                 className={`flex items-center gap-2 px-4 py-1.5 rounded-md text-sm font-medium transition-all duration-300 ${
                     mode === 'simple' 
-                    ? 'bg-slate-900 text-white shadow' 
-                    : 'text-slate-500 hover:text-slate-900 hover:bg-slate-50'
+                    ? 'bg-earth-900 text-white shadow' 
+                    : 'text-slate-500 hover:text-earth-900 hover:bg-slate-50'
                 }`}
                 >
                 <Search className="w-3.5 h-3.5" />
@@ -188,8 +188,8 @@ const SearchBar: React.FC<SearchBarProps> = ({
                 disabled={isLoading}
                 className={`flex items-center gap-2 px-4 py-1.5 rounded-md text-sm font-medium transition-all duration-300 ${
                     mode === 'batch' 
-                    ? 'bg-slate-900 text-white shadow' 
-                    : 'text-slate-500 hover:text-slate-900 hover:bg-slate-50'
+                    ? 'bg-earth-900 text-white shadow' 
+                    : 'text-slate-500 hover:text-earth-900 hover:bg-slate-50'
                 }`}
                 >
                 <Database className="w-3.5 h-3.5" />
@@ -202,12 +202,12 @@ const SearchBar: React.FC<SearchBarProps> = ({
              {/* Project Selector - NOUVEAU DESIGN */}
              <div id="project-selector" className="relative group w-full sm:w-[260px] h-10">
                  {isCreatingProject ? (
-                     <div className="absolute inset-0 flex items-center bg-white rounded-lg border-2 border-indigo-500 shadow-md animate-scale-in z-20">
-                         <div className="pl-3 pr-2 text-indigo-500"><FolderPlus className="w-4 h-4"/></div>
+                     <div className="absolute inset-0 flex items-center bg-white rounded-lg border-2 border-amber-500 shadow-md animate-scale-in z-20">
+                         <div className="pl-3 pr-2 text-amber-500"><FolderPlus className="w-4 h-4"/></div>
                          <input 
                             autoFocus
                             type="text" 
-                            className="flex-1 min-w-0 py-1 text-sm outline-none placeholder:text-slate-400 text-slate-800 font-medium bg-transparent" 
+                            className="flex-1 min-w-0 py-1 text-sm outline-none placeholder:text-slate-400 text-earth-900 font-medium bg-transparent" 
                             placeholder="Nom du dossier..."
                             value={newProjectName}
                             onChange={(e) => setNewProjectName(e.target.value)}
@@ -217,8 +217,8 @@ const SearchBar: React.FC<SearchBarProps> = ({
                             }}
                          />
                          <div className="flex items-center border-l border-slate-100 pl-1 ml-1">
-                            <button onClick={handleCreateProjectSubmit} className="p-1.5 hover:bg-indigo-50 text-indigo-600 rounded-md transition-colors" title="Créer"><Check className="w-4 h-4"/></button>
-                            <button onClick={() => setIsCreatingProject(false)} className="p-1.5 hover:bg-rose-50 text-rose-500 rounded-md transition-colors" title="Annuler"><X className="w-4 h-4"/></button>
+                            <Button variant="ghost" size="sm" onClick={handleCreateProjectSubmit} title="Créer"><Check className="w-4 h-4 text-amber-600"/></Button>
+                            <Button variant="ghost" size="sm" onClick={() => setIsCreatingProject(false)} title="Annuler"><X className="w-4 h-4 text-rose-500"/></Button>
                          </div>
                      </div>
                  ) : (
@@ -231,7 +231,7 @@ const SearchBar: React.FC<SearchBarProps> = ({
                             }}
                             className={`w-full h-full appearance-none rounded-lg pl-10 pr-9 text-sm font-medium border cursor-pointer outline-none transition-all shadow-sm ${
                                 activeProjectId 
-                                ? 'bg-indigo-50/50 border-indigo-200 text-indigo-900 hover:border-indigo-300' 
+                                ? 'bg-amber-50/50 border-amber-200 text-amber-900 hover:border-amber-300' 
                                 : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
                             }`}
                         >
@@ -247,7 +247,7 @@ const SearchBar: React.FC<SearchBarProps> = ({
                         {/* Custom Icon Layer */}
                         <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none">
                             {activeProjectId ? (
-                                <FolderOpen className="w-4 h-4 text-indigo-600" />
+                                <FolderOpen className="w-4 h-4 text-amber-600" />
                             ) : (
                                 <Folder className="w-4 h-4 text-slate-400" />
                             )}
@@ -259,7 +259,7 @@ const SearchBar: React.FC<SearchBarProps> = ({
                         {/* Item Count Badge (if active) */}
                         {activeProject && (
                             <div className="absolute right-9 top-1/2 -translate-y-1/2 pointer-events-none hidden sm:block">
-                                <span className="bg-white/80 text-indigo-600 text-[10px] font-bold px-1.5 py-0.5 rounded border border-indigo-100 shadow-sm">
+                                <span className="bg-white/80 text-amber-600 text-[10px] font-bold px-1.5 py-0.5 rounded border border-amber-100 shadow-sm">
                                     {activeProject.itemCount}
                                 </span>
                             </div>
@@ -275,12 +275,12 @@ const SearchBar: React.FC<SearchBarProps> = ({
                 aria-label="Ouvrir ou fermer les paramètres de recherche"
                 className={`group flex items-center justify-center w-10 h-10 rounded-lg transition-all duration-200 border ${
                     showSettings 
-                    ? 'bg-slate-100 border-slate-300 text-slate-800 shadow-inner' 
-                    : 'bg-white border-slate-200 text-slate-500 hover:text-slate-800 hover:border-slate-300 shadow-sm'
+                    ? 'bg-slate-100 border-slate-300 text-earth-900 shadow-inner' 
+                    : 'bg-white border-slate-200 text-slate-500 hover:text-earth-900 hover:border-slate-300 shadow-sm'
                 }`}
                 title="Configuration"
             >
-                <Settings className={`w-4 h-4 transition-transform duration-500 ${showSettings ? 'rotate-180 text-indigo-500' : 'group-hover:rotate-90'}`} />
+                <Settings className={`w-4 h-4 transition-transform duration-500 ${showSettings ? 'rotate-180 text-amber-500' : 'group-hover:rotate-90'}`} />
             </button>
         </div>
       </div>
@@ -289,12 +289,12 @@ const SearchBar: React.FC<SearchBarProps> = ({
       {showSettings && (
           <div className="mb-6 p-6 rounded-xl bg-white border border-slate-200 shadow-xl shadow-slate-200/50 animate-fade-in-up">
               <div className="flex items-center justify-between mb-6">
-                 <h3 className="text-sm font-semibold text-slate-900 flex items-center gap-2">
-                  <Command className="w-4 h-4 text-indigo-500" />
+                 <h3 className="text-sm font-semibold text-earth-900 flex items-center gap-2">
+                  <Command className="w-4 h-4 text-amber-500" />
                   Configuration
                  </h3>
                  <span className="text-[10px] font-mono px-2 py-1 rounded bg-slate-100 text-slate-500 border border-slate-200 flex items-center gap-1">
-                    v1.0
+                    v2.0
                  </span>
               </div>
               
@@ -307,7 +307,7 @@ const SearchBar: React.FC<SearchBarProps> = ({
                             <select 
                                 value={country}
                                 onChange={(e) => setCountry(e.target.value as CountryCode)}
-                                className="w-full appearance-none bg-slate-50 border border-slate-200 rounded-lg px-3 py-2.5 text-sm text-slate-700 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition-all"
+                                className="w-full appearance-none bg-slate-50 border border-slate-200 rounded-lg px-3 py-2.5 text-sm text-earth-700 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 outline-none transition-all"
                             >
                                 <option value="qc">Québec (QC)</option>
                                 <option value="on">Ontario (ON)</option>
@@ -331,8 +331,8 @@ const SearchBar: React.FC<SearchBarProps> = ({
                           <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-1.5"><Server className="w-3 h-3"/> APIs Connectées</label>
                           <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 space-y-2.5">
                               <div className="flex items-center justify-between">
-                                  <div className="flex items-center gap-2 text-sm text-slate-700 font-medium">
-                                      <Globe className="w-3.5 h-3.5 text-indigo-500" />
+                                  <div className="flex items-center gap-2 text-sm text-earth-700 font-medium">
+                                      <Globe className="w-3.5 h-3.5 text-amber-500" />
                                       Google Serper (Recherche)
                                   </div>
                                   <span className="flex items-center gap-1 text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-100">
@@ -341,7 +341,7 @@ const SearchBar: React.FC<SearchBarProps> = ({
                               </div>
                               <div className="w-full h-px bg-slate-200/60"></div>
                               <div className="flex items-center justify-between">
-                                  <div className="flex items-center gap-2 text-sm text-slate-700 font-medium">
+                                  <div className="flex items-center gap-2 text-sm text-earth-700 font-medium">
                                       <Sparkles className="w-3.5 h-3.5 text-violet-500" />
                                       Gemini AI (Analyse)
                                   </div>
@@ -362,24 +362,24 @@ const SearchBar: React.FC<SearchBarProps> = ({
                       <div className="p-5 rounded-xl border border-slate-100 bg-slate-50 space-y-4 h-full flex flex-col justify-center">
                          <div className="flex items-center justify-between border-b border-slate-200 pb-3">
                             <div className="flex items-center gap-3">
-                                <div className="p-2 bg-indigo-600 text-white rounded-lg shadow-sm shadow-indigo-200"><PieChart className="w-4 h-4"/></div>
+                                <div className="p-2 bg-earth-900 text-white rounded-lg shadow-sm shadow-amber-200"><PieChart className="w-4 h-4"/></div>
                                 <div>
-                                    <span className="block text-sm font-bold text-slate-800">Gestion Budget</span>
+                                    <span className="block text-sm font-bold text-earth-900">Gestion Budget</span>
                                     <span className="block text-[11px] text-slate-500">Crédits Serper consommés</span>
                                 </div>
                             </div>
-                            <span className="text-[10px] font-medium text-slate-400 cursor-pointer hover:text-indigo-600 hover:underline px-2" onClick={onResetQuota}>Reset</span>
+                            <span className="text-[10px] font-medium text-slate-400 cursor-pointer hover:text-amber-600 hover:underline px-2" onClick={onResetQuota}>Reset</span>
                          </div>
                          
                          <div className="space-y-3">
                              <div className="flex justify-between items-end text-xs text-slate-600">
-                                 <span className="font-medium">Utilisé: <b className="text-lg text-slate-900">{quotaUsed}</b></span>
+                                 <span className="font-medium">Utilisé: <b className="text-lg text-earth-900">{quotaUsed}</b></span>
                                  <span>Plafond: 
                                     <input 
                                         type="number" 
                                         value={quotaLimit} 
                                         onChange={(e) => onUpdateQuotaLimit && onUpdateQuotaLimit(Number(e.target.value))}
-                                        className="w-16 bg-white border border-slate-200 rounded px-1 py-0.5 text-right outline-none focus:border-indigo-500 mx-1 text-slate-700"
+                                        className="w-16 bg-white border border-slate-200 rounded px-1 py-0.5 text-right outline-none focus:border-amber-500 mx-1 text-earth-700"
                                     />
                                  </span>
                              </div>
@@ -403,13 +403,13 @@ const SearchBar: React.FC<SearchBarProps> = ({
         {mode === 'simple' ? (
           <div className="space-y-4">
             {/* Input Bar */}
-            <div className={`group relative flex items-center w-full rounded-xl bg-white border shadow-lg shadow-slate-200/50 transition-all focus-within:ring-2 focus-within:ring-indigo-100 focus-within:border-indigo-300 ${activeProjectId ? 'border-indigo-200' : 'border-slate-200'}`}>
-                <div className="absolute inset-y-0 left-0 flex items-center pl-4 pointer-events-none text-slate-400 group-focus-within:text-indigo-500 transition-colors">
+            <div className={`group relative flex items-center w-full rounded-xl bg-white border shadow-lg shadow-slate-200/50 transition-all focus-within:ring-2 focus-within:ring-gold-500/50 focus-within:border-gold-500 ${activeProjectId ? 'border-amber-200' : 'border-slate-200'}`}>
+                <div className="absolute inset-y-0 left-0 flex items-center pl-4 pointer-events-none text-slate-400 group-focus-within:text-amber-500 transition-colors">
                     <Search className="w-5 h-5" />
                 </div>
                 <input
                     type="text"
-                    className="block w-full py-4 pl-12 pr-4 text-base text-slate-800 bg-transparent border-none focus:ring-0 placeholder-slate-400"
+                    className="block w-full py-4 pl-12 pr-4 text-base text-earth-900 bg-transparent border-none focus:ring-0 placeholder-slate-400"
                     placeholder="Recommandé: Nom Entreprise + Adresse Complète"
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
@@ -420,9 +420,9 @@ const SearchBar: React.FC<SearchBarProps> = ({
                     type="button"
                     onClick={() => setUseLocation(!useLocation)}
                     aria-label="Activer ou désactiver l'utilisation de la géolocalisation"
-                    className={`flex items-center justify-center px-3 mx-2 rounded-lg transition-all ${
+                    className={`flex items-center justify-center px-3 mx-2 rounded-lg transition-all h-10 ${
                         useLocation 
-                        ? 'text-indigo-600 bg-indigo-50' 
+                        ? 'text-amber-600 bg-amber-50' 
                         : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'
                     }`}
                     title="Utiliser ma position"
@@ -431,18 +431,16 @@ const SearchBar: React.FC<SearchBarProps> = ({
                 </button>
 
                 <div className="pr-2">
-                    <button
-                    type="submit"
-                    aria-label="Lancer la recherche"
-                    disabled={isLoading || !query.trim()}
-                    className={`px-6 py-2.5 rounded-lg text-sm font-semibold text-white btn-modern bg-indigo-600 flex items-center gap-2 min-w-[130px] justify-center ${
-                        isLoading || !query.trim()
-                        ? 'bg-slate-300 cursor-not-allowed'
-                        : '' 
-                    }`}
+                    <Button
+                        type="submit"
+                        aria-label="Lancer la recherche"
+                        disabled={isLoading || !query.trim()}
+                        isLoading={isLoading}
+                        size="lg"
+                        className="min-w-[130px]"
                     >
-                    {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Rechercher'}
-                    </button>
+                        Rechercher
+                    </Button>
                 </div>
             </div>
             
@@ -467,19 +465,19 @@ const SearchBar: React.FC<SearchBarProps> = ({
                                 onClick={() => setStrategy(s.id as SerperStrategy)}
                                 className={`relative flex flex-col items-start p-3 rounded-lg border text-left card-hover ${
                                     strategy === s.id 
-                                    ? 'bg-indigo-50/50 border-indigo-200 shadow-sm ring-1 ring-indigo-100' 
+                                    ? 'bg-amber-50/50 border-amber-200 shadow-sm ring-1 ring-amber-100' 
                                     : 'bg-white border-slate-100'
                                 }`}
                             >
                                 <div className="flex items-center justify-between w-full mb-1">
-                                    <s.icon className={`w-4 h-4 ${strategy === s.id ? 'text-indigo-600' : 'text-slate-400'}`} />
+                                    <s.icon className={`w-4 h-4 ${strategy === s.id ? 'text-amber-600' : 'text-slate-400'}`} />
                                     <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
-                                        strategy === s.id ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-500'
+                                        strategy === s.id ? 'bg-earth-900 text-white' : 'bg-slate-100 text-slate-500'
                                     }`}>
                                         {s.cost} cr.
                                     </span>
                                 </div>
-                                <div className={`text-xs font-bold mb-0.5 ${strategy === s.id ? 'text-indigo-900' : 'text-slate-700'}`}>{s.name}</div>
+                                <div className={`text-xs font-bold mb-0.5 ${strategy === s.id ? 'text-amber-900' : 'text-slate-700'}`}>{s.name}</div>
                                 <div className="text-[10px] text-slate-500 leading-tight">{s.desc}</div>
                             </button>
                         ))}
@@ -488,10 +486,10 @@ const SearchBar: React.FC<SearchBarProps> = ({
             </div>
           </div>
         ) : (
-          <div className={`w-full rounded-xl overflow-hidden border bg-white shadow-xl shadow-slate-200/50 ${activeProjectId ? 'border-indigo-200' : 'border-slate-200'}`}>
+          <div className={`w-full rounded-xl overflow-hidden border bg-white shadow-xl shadow-slate-200/50 ${activeProjectId ? 'border-amber-200' : 'border-slate-200'}`}>
             <div className="p-3 bg-slate-50 border-b border-slate-200 text-xs font-medium text-slate-600 flex items-center justify-between gap-2">
                <div className="flex items-center gap-2">
-                    <Database className="w-4 h-4 text-indigo-500" />
+                    <Database className="w-4 h-4 text-amber-500" />
                     <span className="font-semibold">Input de données (Batch)</span>
                </div>
                <div className="flex items-center gap-2">
@@ -503,34 +501,36 @@ const SearchBar: React.FC<SearchBarProps> = ({
                       onChange={handleFileSelect} 
                       className="hidden" 
                    />
-                   <button 
-                    type="button"
+                   <Button 
+                    variant="outline"
+                    size="sm"
                     onClick={triggerFileInput}
-                    className="flex items-center gap-1.5 px-2 py-1 bg-white hover:bg-slate-100 border border-slate-200 rounded transition-colors text-slate-700 shadow-sm"
+                    leftIcon={<UploadCloud className="w-3.5 h-3.5" />}
                     title="Importer un fichier (.txt, .csv)"
                    >
-                       <UploadCloud className="w-3.5 h-3.5" />
                        <span className="hidden sm:inline">Importer</span>
-                   </button>
+                   </Button>
 
-                   <button 
-                    type="button"
+                   <Button 
+                    variant="outline"
+                    size="sm"
                     onClick={loadExample}
-                    className="flex items-center gap-1.5 px-2 py-1 bg-white hover:bg-slate-100 border border-slate-200 rounded transition-colors text-slate-700 shadow-sm"
+                    leftIcon={<FileText className="w-3.5 h-3.5" />}
                     title="Charger des données de test"
                    >
-                       <FileText className="w-3.5 h-3.5" />
                        <span className="hidden sm:inline">Exemple</span>
-                   </button>
+                   </Button>
+
                    {query && (
-                    <button 
-                        type="button"
+                    <Button 
+                        variant="ghost"
+                        size="sm"
                         onClick={clearQuery}
-                        className="flex items-center gap-1.5 px-2 py-1 hover:bg-rose-50 hover:text-rose-600 rounded transition-colors text-slate-400"
+                        className="text-slate-400 hover:text-rose-600"
                         title="Tout effacer"
                     >
                         <Eraser className="w-3.5 h-3.5" />
-                    </button>
+                    </Button>
                    )}
                    <div className="w-px h-4 bg-slate-300 mx-1"></div>
                    <span className="text-slate-500 font-mono flex items-center gap-1 text-[10px]"><Zap className="w-3 h-3 text-amber-500"/> {country.toUpperCase()}</span>
@@ -539,20 +539,20 @@ const SearchBar: React.FC<SearchBarProps> = ({
             
             {/* DROP ZONE CONTAINER */}
             <div 
-                className={`relative transition-all ${isDragging ? 'bg-indigo-50' : ''}`}
+                className={`relative transition-all ${isDragging ? 'bg-amber-50' : ''}`}
                 onDragOver={handleDragOver}
                 onDragLeave={handleDragLeave}
                 onDrop={handleDrop}
             >
                 {isDragging && (
-                    <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-white/90 backdrop-blur-sm border-2 border-dashed border-indigo-400 rounded-none animate-in fade-in duration-200">
-                        <UploadCloud className="w-10 h-10 text-indigo-500 mb-2 animate-bounce" />
-                        <p className="text-sm font-bold text-slate-800">Relâchez pour importer</p>
+                    <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-white/90 backdrop-blur-sm border-2 border-dashed border-amber-400 rounded-none animate-in fade-in duration-200">
+                        <UploadCloud className="w-10 h-10 text-amber-500 mb-2 animate-bounce" />
+                        <p className="text-sm font-bold text-earth-900">Relâchez pour importer</p>
                     </div>
                 )}
                 
                 <textarea
-                className="block w-full p-5 text-sm text-slate-800 bg-transparent border-none focus:ring-0 placeholder-slate-400 min-h-[200px] resize-y font-mono leading-relaxed bg-[#FFFFFF] relative z-0"
+                className="block w-full p-5 text-sm text-earth-900 bg-transparent border-none focus:ring-0 placeholder-slate-400 min-h-[10rem] md:min-h-[12.5rem] resize-y font-mono leading-relaxed bg-[#FFFFFF] relative z-0"
                 placeholder={"Collez votre liste de clients pour mise à jour :\nID123 - Boulangerie Paul Paris\nClient 45 - Garage Michel Bordeaux\n..."}
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
@@ -594,19 +594,19 @@ const SearchBar: React.FC<SearchBarProps> = ({
                                onClick={() => setStrategy(s.id as SerperStrategy)}
                                className={`relative flex flex-col items-start p-3 rounded-lg border text-left card-hover ${
                                    strategy === s.id 
-                                   ? 'bg-white border-indigo-500 shadow-sm ring-1 ring-indigo-500/20' 
+                                   ? 'bg-white border-amber-500 shadow-sm ring-1 ring-amber-500/20' 
                                    : 'bg-slate-100/50 border-slate-200'
                                }`}
                            >
                                <div className="flex items-center justify-between w-full mb-1">
-                                   <s.icon className={`w-4 h-4 ${strategy === s.id ? 'text-indigo-600' : 'text-slate-400'}`} />
+                                   <s.icon className={`w-4 h-4 ${strategy === s.id ? 'text-amber-600' : 'text-slate-400'}`} />
                                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
-                                       strategy === s.id ? 'bg-indigo-600 text-white' : 'bg-slate-200 text-slate-500'
+                                       strategy === s.id ? 'bg-earth-900 text-white' : 'bg-slate-200 text-slate-500'
                                    }`}>
                                        {s.cost} cr.
                                    </span>
                                </div>
-                               <div className={`text-xs font-bold mb-0.5 ${strategy === s.id ? 'text-slate-900' : 'text-slate-600'}`}>{s.name}</div>
+                               <div className={`text-xs font-bold mb-0.5 ${strategy === s.id ? 'text-earth-900' : 'text-slate-600'}`}>{s.name}</div>
                                <div className="text-[10px] text-slate-500 leading-tight">{s.desc}</div>
                            </button>
                        ))}
@@ -616,37 +616,27 @@ const SearchBar: React.FC<SearchBarProps> = ({
                <div className="flex items-center justify-between pt-2 border-t border-slate-200/50 mt-2">
                     <div className="flex flex-col gap-1">
                         <div className="flex items-center gap-2">
-                            <div className={`h-2 w-2 rounded-full ${lineCount > 0 ? 'bg-indigo-500 animate-pulse' : 'bg-slate-300'}`}></div>
+                            <div className={`h-2 w-2 rounded-full ${lineCount > 0 ? 'bg-amber-500 animate-pulse' : 'bg-slate-300'}`}></div>
                             <span className="text-xs font-medium text-slate-500">
                                 {lineCount} entreprises à analyser
                             </span>
                         </div>
                         {activeProjectId && (
-                            <span className="text-[10px] font-medium text-indigo-600 flex items-center gap-1">
+                            <span className="text-[10px] font-medium text-amber-600 flex items-center gap-1">
                                 <Folder className="w-3 h-3" />
                                 Enregistrement dans : <b>{activeProject?.name}</b>
                             </span>
                         )}
                     </div>
 
-                    <button
+                    <Button
                         type="submit"
                         disabled={isLoading || !query.trim()}
-                        className={`px-6 py-2.5 text-sm font-semibold text-white rounded-lg btn-modern flex items-center gap-2 ${
-                            isLoading || !query.trim()
-                            ? 'bg-slate-300 cursor-not-allowed'
-                            : 'bg-indigo-600'
-                        }`}
+                        isLoading={isLoading}
+                        size="lg"
                     >
-                        {isLoading ? (
-                        <>
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                            Traitement...
-                        </>
-                        ) : (
-                        'Lancer la Vérification'
-                        )}
-                    </button>
+                        {isLoading ? 'Traitement...' : 'Lancer la Vérification'}
+                    </Button>
                </div>
             </div>
           </div>

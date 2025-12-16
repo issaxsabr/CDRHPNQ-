@@ -1,6 +1,6 @@
-
 import { getDB } from './database';
-import { BusinessData } from '../types';
+// FIX: Import `ProjectStatus` to use enum values for status checks.
+import { BusinessData, ProjectStatus } from '../types';
 import { securePack, secureUnpack } from './security';
 
 interface CacheEntry {
@@ -81,7 +81,8 @@ export class SmartCache {
       return baseTime * 7; // 7 jours
     }
     
-    if (data.status === 'Introuvable' || (data.status && data.status.includes('Erreur'))) {
+    // FIX: Use `ProjectStatus` enum for type-safe comparison instead of string literals.
+    if (data.status === ProjectStatus.NOT_FOUND || data.status === ProjectStatus.ERROR) {
       return 60 * 60 * 1000; // 1 heure
     }
     

@@ -1,10 +1,10 @@
-
 import React, { useState, useEffect, useRef } from 'react';
-import { BusinessData, ContactPerson, ColumnLabelMap } from '../types';
+import { BusinessData, ContactPerson, ColumnLabelMap, ProjectStatus } from '../types';
 import { Clock, Phone, MapPin, Globe, Tag, MapIcon, Mail, Facebook, Linkedin, Check, Plus, User, Copy, Edit2, Building2, PenTool, Star } from 'lucide-react';
 import { FixedSizeList as List } from 'react-window';
 import AutoSizer from 'react-virtualized-auto-sizer';
 import StatusBadge from './StatusBadge';
+import Card from './ui/Card';
 
 interface ResultTableProps {
   data: BusinessData[];
@@ -63,7 +63,7 @@ const EditableCell = ({
                 onChange={(e) => setTempValue(e.target.value)}
                 onBlur={handleSave}
                 onKeyDown={handleKeyDown}
-                className={`w-full bg-white border border-indigo-500 rounded px-1.5 py-0.5 text-xs text-slate-900 outline-none shadow-sm ${className}`}
+                className={`w-full bg-white border border-amber-500 rounded px-1.5 py-0.5 text-xs text-earth-900 outline-none shadow-sm ${className}`}
             />
         );
     }
@@ -81,6 +81,47 @@ const EditableCell = ({
         </div>
     );
 };
+
+const MobileResultCard: React.FC<{ item: BusinessData, index: number, onUpdate: ResultTableProps['onUpdate'] }> = ({ item, index, onUpdate }) => {
+    const domain = item.website ? new URL(item.website).hostname : null;
+    const primaryPhone = item.phone && item.phone !== 'N/A' ? item.phone : (item.phones && item.phones.length > 0 ? item.phones[0] : "");
+    const primaryEmail = item.email ? item.email : (item.emails && item.emails.length > 0 ? item.emails[0] : "");
+
+    return (
+        <Card className="mb-4 !p-4">
+            <div className="flex justify-between items-start">
+                <div className="flex-1 min-w-0">
+                    <EditableCell 
+                        value={item.name} 
+                        onSave={(val) => onUpdate(index, 'name', val)}
+                        className="font-semibold text-earth-900 text-base"
+                    />
+                    {item.category && <p className="text-xs text-slate-500 mt-1">{item.category}</p>}
+                </div>
+                <StatusBadge status={item.status} label={item.statusLabel} />
+            </div>
+            <div className="mt-4 space-y-3 text-sm">
+                <div className="flex items-start gap-3">
+                    <MapPin className="w-4 h-4 text-slate-400 mt-0.5 shrink-0" />
+                    <EditableCell value={item.address} onSave={(val) => onUpdate(index, 'address', val)} className="text-slate-600 text-xs" />
+                </div>
+                <div className="flex items-start gap-3">
+                    <Phone className="w-4 h-4 text-slate-400 mt-0.5 shrink-0" />
+                    <EditableCell value={primaryPhone} onSave={(val) => onUpdate(index, 'phone', val)} className="text-slate-600 text-xs font-mono" />
+                </div>
+                <div className="flex items-start gap-3">
+                    <Mail className="w-4 h-4 text-slate-400 mt-0.5 shrink-0" />
+                    <EditableCell value={primaryEmail} onSave={(val) => onUpdate(index, 'email', val)} className="text-slate-600 text-xs font-mono" />
+                </div>
+            </div>
+            <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
+                {item.website && <a href={item.website} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-slate-600 bg-white hover:bg-slate-50 px-2.5 py-1 rounded-md border border-slate-200 text-[10px] font-medium shadow-sm hover-lift"><Globe className="w-3 h-3 shrink-0 text-slate-400" /> Web</a>}
+                {item.sourceUri && <a href={item.sourceUri} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-white bg-earth-900 hover:bg-black px-2.5 py-1 rounded-md shadow-sm text-[10px] font-medium hover-lift"><MapIcon className="w-3 h-3 shrink-0 text-slate-400" /> Maps</a>}
+            </div>
+        </Card>
+    );
+};
+
 
 const ResultTable: React.FC<ResultTableProps> = ({ data, onUpdate, columnLabels }) => {
   if (data.length === 0) {
@@ -136,7 +177,7 @@ const ResultTable: React.FC<ResultTableProps> = ({ data, onUpdate, columnLabels 
             display: 'grid',
             gridTemplateColumns
         }} 
-        className="items-center border-b border-slate-100 transition-colors hover:bg-slate-50 hover:z-50 group text-sm text-slate-700 relative bg-white table-row-stable"
+        className="items-center border-b border-slate-100 transition-colors hover:bg-slate-50 hover:z-50 group text-sm text-earth-700 relative bg-white table-row-stable"
       >
         {/* 1. Entreprise */}
         <div className="px-4 py-2 flex flex-col gap-1 h-full justify-center relative border-r border-transparent group-hover:border-slate-100">
@@ -159,13 +200,13 @@ const ResultTable: React.FC<ResultTableProps> = ({ data, onUpdate, columnLabels 
                     <EditableCell 
                         value={item.name} 
                         onSave={(val) => onUpdate(index, 'name', val)}
-                        className="font-semibold text-slate-900 leading-tight"
+                        className="font-semibold text-earth-900 leading-tight"
                     />
                 </div>
             </div>
             {item.searchedTerm && item.name.toLowerCase() !== item.searchedTerm.toLowerCase() && (
                 <div className="inline-flex items-center gap-1.5 text-[10px] text-slate-400 opacity-60 group-hover:opacity-100 transition-opacity pointer-events-none pl-8">
-                    <span className="w-1 h-1 rounded-full bg-indigo-400 shrink-0"></span>
+                    <span className="w-1 h-1 rounded-full bg-amber-400 shrink-0"></span>
                     <span className="truncate max-w-full">Req: "{item.searchedTerm}"</span>
                 </div>
             )}
@@ -177,7 +218,7 @@ const ResultTable: React.FC<ResultTableProps> = ({ data, onUpdate, columnLabels 
                 <div className="w-full">
                     <div className="flex items-center justify-between text-[10px] font-bold">
                         <span className="text-slate-500">Score</span>
-                        <span className="text-slate-900">{item.qualityScore}</span>
+                        <span className="text-earth-900">{item.qualityScore}</span>
                     </div>
                     <div className="w-full h-1.5 bg-slate-200 rounded-full overflow-hidden mt-1">
                         <div className={`h-full rounded-full ${scoreColor(item.qualityScore)}`} style={{ width: `${item.qualityScore}%`}}></div>
@@ -188,7 +229,7 @@ const ResultTable: React.FC<ResultTableProps> = ({ data, onUpdate, columnLabels 
 
         {/* 3. Statut API */}
         <div className="px-3 py-2 flex flex-col items-start justify-center gap-1.5 h-full relative border-r border-transparent group-hover:border-slate-100">
-            <StatusBadge status={item.status} />
+            <StatusBadge status={item.status} label={item.statusLabel} />
         </div>
 
         {/* 4. Catégorie */}
@@ -222,7 +263,7 @@ const ResultTable: React.FC<ResultTableProps> = ({ data, onUpdate, columnLabels 
             <div className="flex flex-col gap-1 items-start w-full">
                 <div className="flex items-center gap-1 w-full group/phone">
                     <Phone className="w-3 h-3 shrink-0 text-slate-400" />
-                    <div className="flex-1 min-w-0 font-mono text-[11px] text-slate-700">
+                    <div className="flex-1 min-w-0 font-mono text-[11px] text-earth-700">
                          <EditableCell 
                             value={primaryPhone} 
                             onSave={(val) => onUpdate(index, 'phone', val)}
@@ -233,7 +274,7 @@ const ResultTable: React.FC<ResultTableProps> = ({ data, onUpdate, columnLabels 
                         <button 
                             onClick={() => copyToClipboard(primaryPhone, `${rowId}-phone`)}
                             aria-label="Copier le numéro de téléphone principal"
-                            className="p-1 text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 rounded opacity-0 group-hover/phone:opacity-100 transition-opacity"
+                            className="p-1 text-slate-300 hover:text-amber-600 hover:bg-amber-50 rounded opacity-0 group-hover/phone:opacity-100 transition-opacity"
                             title="Copier"
                         >
                             {copiedId === `${rowId}-phone` ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
@@ -246,9 +287,9 @@ const ResultTable: React.FC<ResultTableProps> = ({ data, onUpdate, columnLabels 
                             <Plus className="w-2.5 h-2.5" />
                             <span>{secondaryPhones.length}</span>
                         </button>
-                        <div className="absolute top-full left-0 mt-1 w-48 bg-white border border-slate-200 rounded-lg shadow-xl p-1 opacity-0 invisible group-hover/dropdown:opacity-100 group-hover/dropdown:visible transition-all z-[60]">
+                        <div className="absolute top-full left-0 mt-1 w-48 bg-white border border-slate-200 rounded-lg shadow-xl p-1 opacity-0 invisible group-hover/dropdown:opacity-100 group-hover/dropdown:visible transition-all z-[var(--z-dropdown)]">
                             {secondaryPhones.map((ph, idx) => (
-                                <button key={idx} onClick={(e) => { e.stopPropagation(); copyToClipboard(ph, `${rowId}-phone-${idx+1}`); }} aria-label={`Copier le numéro de téléphone ${ph}`} className="w-full flex items-center justify-between px-2 py-1.5 text-[11px] text-slate-700 hover:bg-slate-50 rounded cursor-pointer font-mono">
+                                <button key={idx} onClick={(e) => { e.stopPropagation(); copyToClipboard(ph, `${rowId}-phone-${idx+1}`); }} aria-label={`Copier le numéro de téléphone ${ph}`} className="w-full flex items-center justify-between px-2 py-1.5 text-[11px] text-earth-700 hover:bg-slate-50 rounded cursor-pointer font-mono">
                                     {ph}
                                     {copiedId === `${rowId}-phone-${idx+1}` ? <Check className="w-3 h-3 text-emerald-500" /> : null}
                                 </button>
@@ -274,19 +315,19 @@ const ResultTable: React.FC<ResultTableProps> = ({ data, onUpdate, columnLabels 
         {/* 8. Lead Contact */}
         <div className="px-4 py-2 h-full overflow-visible flex flex-col justify-center gap-1.5 relative border-r border-transparent group-hover:border-slate-100">
             {item.decisionMakers && item.decisionMakers.length > 0 && (
-                <div className="flex items-center gap-1.5 text-[10px] font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100 w-fit max-w-full shadow-sm" title={item.decisionMakers[0].title || "Décideur"}>
-                    <User className="w-3 h-3 shrink-0 text-indigo-500" />
+                <div className="flex items-center gap-1.5 text-[10px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-100 w-fit max-w-full shadow-sm" title={item.decisionMakers[0].title || "Décideur"}>
+                    <User className="w-3 h-3 shrink-0 text-amber-500" />
                     <span className="truncate">{item.decisionMakers[0].name}</span>
                 </div>
             )}
             <div className="flex flex-col gap-1 items-start w-full">
                 <div className="flex items-center gap-2 w-full group/email">
                     <Mail className="w-3 h-3 shrink-0 text-slate-400" />
-                    <div className="flex-1 min-w-0 font-mono text-[10px] text-slate-700">
+                    <div className="flex-1 min-w-0 font-mono text-[10px] text-earth-700">
                         <EditableCell value={primaryEmail} onSave={(val) => onUpdate(index, 'email', val)} type="email" placeholder="Email..."/>
                     </div>
                      {primaryEmail && (
-                        <button onClick={() => copyToClipboard(primaryEmail, `${rowId}-email`)} aria-label="Copier l'adresse email principale" className="p-1 text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 rounded opacity-0 group-hover/email:opacity-100 transition-opacity" title="Copier">
+                        <button onClick={() => copyToClipboard(primaryEmail, `${rowId}-email`)} aria-label="Copier l'adresse email principale" className="p-1 text-slate-300 hover:text-amber-600 hover:bg-amber-50 rounded opacity-0 group-hover/email:opacity-100 transition-opacity" title="Copier">
                             {copiedId === `${rowId}-email` ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
                         </button>
                     )}
@@ -296,10 +337,10 @@ const ResultTable: React.FC<ResultTableProps> = ({ data, onUpdate, columnLabels 
                         <button aria-label="Afficher les adresses email secondaires" className="flex items-center gap-1 px-1.5 py-0.5 text-[10px] bg-slate-100 text-slate-500 hover:text-slate-900 border border-slate-200 rounded cursor-pointer w-fit transition-colors">
                             <Plus className="w-2.5 h-2.5" /><span>{secondaryEmails.length}</span>
                         </button>
-                        <div className="absolute top-full left-0 mt-1 w-72 bg-white border border-slate-200 rounded-lg shadow-xl p-1 opacity-0 invisible group-hover/dropdown:opacity-100 group-hover/dropdown:visible transition-all z-[60]">
+                        <div className="absolute top-full left-0 mt-1 w-72 bg-white border border-slate-200 rounded-lg shadow-xl p-1 opacity-0 invisible group-hover/dropdown:opacity-100 group-hover/dropdown:visible transition-all z-[var(--z-dropdown)]">
                             <div className="text-[10px] font-semibold text-slate-400 px-2 py-1 uppercase tracking-wider bg-slate-50 rounded-t">Autres emails</div>
                             {secondaryEmails.map((em, idx) => (
-                                <button key={idx} onClick={(e) => { e.stopPropagation(); copyToClipboard(em, `${rowId}-email-list-${idx}`); }} aria-label={`Copier l'adresse email ${em}`} className="w-full flex items-center justify-between px-2 py-1.5 text-[11px] text-slate-700 hover:bg-slate-50 rounded cursor-pointer truncate font-mono">
+                                <button key={idx} onClick={(e) => { e.stopPropagation(); copyToClipboard(em, `${rowId}-email-list-${idx}`); }} aria-label={`Copier l'adresse email ${em}`} className="w-full flex items-center justify-between px-2 py-1.5 text-[11px] text-earth-700 hover:bg-slate-50 rounded cursor-pointer truncate font-mono">
                                     <span className="truncate">{getLabelForEmail(em, item.decisionMakers)}</span>
                                     {copiedId === `${rowId}-email-list-${idx}` ? <Check className="w-3 h-3 text-emerald-500 shrink-0 ml-2" /> : null}
                                 </button>
@@ -319,19 +360,27 @@ const ResultTable: React.FC<ResultTableProps> = ({ data, onUpdate, columnLabels 
         {/* 9. Actions */}
         <div className="px-4 py-2 text-right h-full overflow-hidden flex flex-col justify-center items-end gap-1.5">
             {item.website && (<a href={item.website} target="_blank" rel="noopener noreferrer" className="w-full inline-flex items-center justify-center gap-1.5 text-slate-600 bg-white hover:bg-slate-50 px-2.5 py-1 rounded-md border border-slate-200 text-[10px] font-medium shadow-sm hover-lift"><Globe className="w-3 h-3 shrink-0 text-slate-400" /> Web</a>)}
-            {item.sourceUri ? (<a href={item.sourceUri} target="_blank" rel="noopener noreferrer" className="w-full inline-flex items-center justify-center gap-1.5 text-white bg-slate-800 hover:bg-slate-900 px-2.5 py-1 rounded-md shadow-sm text-[10px] font-medium hover-lift"><MapIcon className="w-3 h-3 shrink-0 text-slate-400" /> Maps</a>) : null}
+            {item.sourceUri ? (<a href={item.sourceUri} target="_blank" rel="noopener noreferrer" className="w-full inline-flex items-center justify-center gap-1.5 text-white bg-earth-900 hover:bg-black px-2.5 py-1 rounded-md shadow-sm text-[10px] font-medium hover-lift"><MapIcon className="w-3 h-3 shrink-0 text-slate-400" /> Maps</a>) : null}
         </div>
       </div>
     );
   };
 
   return (
-    <div className="w-full overflow-hidden rounded-xl border border-slate-200 shadow-xl shadow-slate-200/50 bg-white flex flex-col h-[650px] animate-fade-in-up">
-        <div className="flex-1 flex flex-col overflow-x-auto">
+    <div className="w-full overflow-hidden rounded-xl border border-slate-200 shadow-xl shadow-slate-200/50 bg-white flex flex-col h-[calc(100vh-20rem)] md:h-[650px] animate-fade-in-up">
+        {/* Mobile View */}
+        <div className="md:hidden p-4 overflow-y-auto">
+            {data.map((item, index) => (
+                <MobileResultCard key={item.id || index} item={item} index={index} onUpdate={onUpdate} />
+            ))}
+        </div>
+
+        {/* Desktop View */}
+        <div className="hidden md:flex flex-1 flex-col overflow-x-auto">
             <div className="flex flex-col h-full">
                 <div className="grid bg-slate-50 text-[10px] uppercase tracking-wider font-semibold text-slate-500 border-b border-slate-200 z-10 shrink-0" style={{ gridTemplateColumns }}>
                     <div className="px-4 py-3 border-r border-slate-200/50">{columnLabels.name}</div>
-                    <div className="px-3 py-3 border-r border-slate-200/50 bg-indigo-50/50 text-indigo-600">{columnLabels.qualityScore}</div>
+                    <div className="px-3 py-3 border-r border-slate-200/50 bg-amber-50/50 text-amber-600">{columnLabels.qualityScore}</div>
                     <div className="px-3 py-3 border-r border-slate-200/50">{columnLabels.status}</div>
                     <div className="px-3 py-3 border-r border-slate-200/50">{columnLabels.category}</div>
                     <div className="px-4 py-3 border-r border-slate-200/50">{columnLabels.address}</div>
@@ -353,7 +402,7 @@ const ResultTable: React.FC<ResultTableProps> = ({ data, onUpdate, columnLabels 
         </div>
         <div className="px-6 py-2 bg-slate-50 border-t border-slate-200 text-right shrink-0 relative z-20 flex justify-between items-center">
             <div className="flex items-center gap-2 text-[10px] text-slate-400 font-mono">
-                 <span className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse"></span>
+                 <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
                  SERPER_API :: MOTEUR_ANALYTIQUE V2.0 (OPTIMIZED)
             </div>
             <div className="text-[10px] text-slate-400">

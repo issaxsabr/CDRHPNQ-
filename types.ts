@@ -1,8 +1,16 @@
-
-
-
-
-
+export enum ProjectStatus {
+  ACTIVE = 'active',
+  CACHED = 'cached',
+  FOUND = 'found',
+  CLOSED = 'closed',
+  PERMANENTLY_CLOSED = 'permanently_closed',
+  NOT_FOUND = 'not_found',
+  DUPLICATE = 'duplicate',
+  IGNORED = 'ignored',
+  ERROR = 'error',
+  WARNING = 'warning',
+  CHECKING = 'checking'
+}
 
 export interface ContactPerson {
   name: string;
@@ -14,7 +22,8 @@ export interface BusinessData {
   id?: string; // UUID unique pour chaque enregistrement dans la DB
   projectId?: string; // ID du projet parent
   name: string;
-  status: string; // Statut opérationnel (Ouvert, Fermé...)
+  status: ProjectStatus;
+  statusLabel?: string; // Pour les détails dynamiques (ex: nom du dossier dupliqué)
   address: string;
   phone: string;
   phones?: string[]; // Liste de tous les téléphones trouvés
@@ -26,7 +35,6 @@ export interface BusinessData {
   // Nouveaux champs enrichis (Serper Places)
   website?: string;
   category?: string;
-  // Note: rating, ratingCount, priceLevel supprimés car non utilisés
   
   // Champs LeadGen
   email?: string;

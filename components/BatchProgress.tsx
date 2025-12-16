@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { Clock, StopCircle } from 'lucide-react';
 import Timeline, { TimelineStep } from './Timeline';
@@ -36,14 +35,14 @@ const BatchProgress: React.FC<BatchProgressProps> = ({
                         <span className="text-xs text-slate-500">Ligne {progress} sur {total}</span>
                     </div>
                     {estimatedTimeLeft && (
-                        <span className="hidden sm:flex text-xs items-center gap-1.5 text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-md border border-indigo-100 font-mono">
+                        <span className="hidden sm:flex text-xs items-center gap-1.5 text-amber-600 bg-amber-50 px-2.5 py-1 rounded-md border border-amber-100 font-mono">
                             <Clock className="w-3.5 h-3.5" /> ~ {estimatedTimeLeft}
                         </span>
                     )}
                 </div>
                 <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden relative">
                     <div
-                        className="h-2 rounded-full transition-all duration-500 ease-out relative bg-gradient-to-r from-indigo-500 to-violet-500"
+                        className="h-2 rounded-full transition-all duration-500 ease-out relative bg-gradient-to-r from-amber-500 to-yellow-500"
                         style={{ width: `${(progress / total) * 100}%` }}
                     ></div>
                 </div>
