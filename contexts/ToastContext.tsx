@@ -57,7 +57,7 @@ const Toast: React.FC<{ toast: ToastMessage; onRemove: (id: string) => void }> =
   const isError = toast.type === 'error';
 
   return (
-    <div className={`toast-slide-in glass rounded-xl p-4 shadow-elegant max-w-sm w-full border-l-4 ${BORDER_COLORS[toast.type]}`}>
+    <div className={`notification-enter glass rounded-xl p-4 shadow-elegant max-w-sm w-full border-l-4 ${BORDER_COLORS[toast.type]}`}>
       <div className="flex items-start gap-3">
         <div className={isError ? 'animate-shake' : 'animate-bounce'}>
           <div className={`w-10 h-10 ${ICON_BG_COLORS[toast.type]} rounded-full flex items-center justify-center`}>
@@ -67,20 +67,20 @@ const Toast: React.FC<{ toast: ToastMessage; onRemove: (id: string) => void }> =
         
         <div className="flex-1 pt-1">
           <h4 
-            className="font-bold text-[#403E37] mb-0.5"
+            className="font-bold text-earth-900 mb-0.5"
           >
             {toast.title}
           </h4>
-          <p className="text-sm text-[#8B865F]">{toast.message}</p>
+          <p className="text-sm text-earth-500">{toast.message}</p>
         </div>
         
-        <button onClick={() => onRemove(toast.id)} className="text-slate-400 hover:text-slate-600 transition hover-rotate shrink-0">
+        <button onClick={() => onRemove(toast.id)} className="text-beige-300 hover:text-earth-700 transition hover-rotate shrink-0">
           <X className="w-5 h-5" />
         </button>
       </div>
       
       {toast.type !== 'error' && (
-        <div className="mt-3 h-1 bg-slate-200 rounded-full overflow-hidden">
+        <div className="mt-3 h-1 bg-beige-200 rounded-full overflow-hidden">
           <div 
             className={`h-full ${PROGRESS_BG_COLORS[toast.type]} rounded-full`}
             style={{ animation: `progress-fill ${ (toast.duration || 4000) / 1000 }s linear` }}

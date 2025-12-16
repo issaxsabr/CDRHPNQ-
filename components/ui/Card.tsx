@@ -1,3 +1,4 @@
+
 import React from 'react';
 
 interface CardProps {
@@ -11,15 +12,14 @@ const Card: React.FC<CardProps> = ({
   children,
   hover = false,
   glass = false,
-  className = '',
-  ...props
+  className = ''
 }) => {
   const baseClasses = 'rounded-xl border p-6 transition-all';
   const hoverClasses = hover ? 'card-hover cursor-pointer' : '';
-  const glassClasses = glass ? 'glass-light' : 'bg-white border-slate-200 shadow-card';
+  const glassClasses = glass ? 'glass backdrop-blur-xl' : 'bg-white border-slate-200 shadow-card';
 
   return (
-    <div className={`${baseClasses} ${hoverClasses} ${glassClasses} ${className}`} {...props}>
+    <div className={`${baseClasses} ${hoverClasses} ${glassClasses} ${className}`}>
       {children}
     </div>
   );

@@ -1,19 +1,23 @@
+
 import React, { useState, useCallback, useEffect, useMemo, lazy, Suspense } from 'react';
 import { Session } from '@supabase/supabase-js';
-import { Info, StopCircle, Clock, Zap, Sparkles, Filter, Check, PlayCircle, X, FileJson, AlertOctagon, RotateCw, HardDrive, TableProperties, FileCode, FileSpreadsheet, Loader2, AlertTriangle } from 'lucide-react';
-import SearchBar from './components/SearchBar';
-import ResultTable from './components/ResultTable';
+import { Info, Sparkles, Filter, Check, PlayCircle, X, FileJson, AlertOctagon, RotateCw, HardDrive, TableProperties, FileCode, FileSpreadsheet, Zap } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+// Lazy loaded components for performance
+const SearchBar = lazy(() => import('./components/SearchBar'));
+const ResultTable = lazy(() => import('./components/ResultTable'));
 import AuthOverlay from './components/AuthOverlay';
 import Header from './components/Header';
 import DashboardStats from './components/DashboardStats';
 import { ToastProvider, useToast } from './contexts/ToastContext';
 import Button from './components/ui/Button';
+import Container from './components/ui/Container';
 
 import { supabase } from './services/supabase';
 import { extractDataFromContext, enrichWithGemini } from './services/gemini';
 import { searchWithSerper } from './services/serper';
 import { cacheService, projectService, blacklistService } from './services/storage';
-import { BusinessData, ScraperState, ScraperProvider, CountryCode, SavedSession, SerperStrategy, Project, ColumnLabelMap, ProjectStatus } from './types';
+import { BusinessData, ScraperState, ScraperProvider, CountryCode, SavedSession, SerperStrategy, Project, ColumnLabelMap } from './types';
 import { getInteractiveHTMLContent, exportToExcel } from './utils/exportUtils';
 import { validateAndSanitize } from './utils/validation';
 import { z } from 'zod';
@@ -59,8 +63,7 @@ const mergeNewResults = (currentResults: BusinessData[], newResults: BusinessDat
       const existing = updatedList[existingIndex];
       updatedList[existingIndex] = {
         ...existing,
-        status: (existing.status === ProjectStatus.NOT_FOUND || existing.status === ProjectStatus.ERROR) ? newItem.status : existing.status,
-        statusLabel: newItem.statusLabel || existing.statusLabel,
+        status: (existing.status === 'Introuvable' || existing.status === 'Erreur' || existing.status === 'Non trouvé') ? newItem.status : existing.status,
         address: (existing.address && existing.address !== 'N/A') ? existing.address : newItem.address,
         hours: (existing.hours && existing.hours !== 'N/A') ? existing.hours : newItem.hours,
         website: existing.website || newItem.website,
@@ -82,6 +85,12 @@ const mergeNewResults = (currentResults: BusinessData[], newResults: BusinessDat
   });
 
   return updatedList;
+};
+
+const pageVariants = {
+  initial: { opacity: 0, y: 20 },
+  animate: { opacity: 1, y: 0 },
+  exit: { opacity: 0, y: -20 }
 };
 
 const AppContent: React.FC = () => {
@@ -347,10 +356,9 @@ const AppContent: React.FC = () => {
   }, [activeProjectId, addToast, state.results]);
 
   const processSingleQuery = async (query: string, provider: ScraperProvider, serperKey: string, country: string, strategy: SerperStrategy): Promise<{ businesses: BusinessData[], rawText: string, qualityScore?: number }> => {
-      const isLeadGen = strategy === 'maps_web_leadgen';
       const serperData = await searchWithSerper(query, serperKey, country, strategy, {
-          enableDecisionMakerSearch: isLeadGen,
-          enableSocialsSearch: isLeadGen
+          enableDecisionMakerSearch: false,
+          enableSocialsSearch: false
       });
       const geminiEnrichmentData = await enrichWithGemini(serperData, query);
       return await extractDataFromContext(query, serperData, geminiEnrichmentData);
@@ -372,7 +380,7 @@ const AppContent: React.FC = () => {
       
       const cached = await cacheService.get(query);
       if (cached) {
-          const newResult = { ...cached, status: ProjectStatus.CACHED, statusLabel: "Depuis Cache" };
+          const newResult = { ...cached, status: cached.status + " (Cache)" };
           setState(prev => ({ ...prev, isLoading: false, results: mergeNewResults(prev.results, [newResult]), error: null }));
           await projectService.addResultsToProject(activeProjectId, [newResult]);
           await loadProjects();
@@ -398,11 +406,9 @@ const AppContent: React.FC = () => {
 
             if(resultStatus.status === 'duplicate') {
                 const projName = await projectService.getProjectName(resultStatus.duplicateProjectId || '');
-                item.status = ProjectStatus.DUPLICATE;
-                item.statusLabel = `Doublon (Dossier: ${projName})`;
+                item.status = `Doublon (Dossier: ${projName})`;
             } else if (resultStatus.status === 'blacklisted') {
                 item.status = resultStatus.item.status;
-                item.statusLabel = resultStatus.item.statusLabel;
             }
 
             await loadProjects();
@@ -450,7 +456,7 @@ const AppContent: React.FC = () => {
                 const { businesses } = await processSingleQuery(line, provider, serperKey, country, strategy);
                 return { success: true, data: businesses[0], fromCache: false };
             } catch (e: any) {
-                return { success: false, data: { name: line, status: ProjectStatus.ERROR, statusLabel: e.message || "Erreur technique", address: "", phone: "", hours: "", searchedTerm: line } as BusinessData };
+                return { success: false, data: { name: line, status: "Erreur", address: e.message || "Erreur technique", phone: "", hours: "", searchedTerm: line } as BusinessData };
             }
         });
 
@@ -461,28 +467,20 @@ const AppContent: React.FC = () => {
             const realApiCallCount = batchResults.filter(r => !r.fromCache && r.success).length;
             if (realApiCallCount > 0) updateQuotaUsed(realApiCallCount * costPerQuery);
             
-            const resultsToProcess = batchResults.map(res => {
-                if (res.fromCache && res.data) {
-                    return {...res.data, status: ProjectStatus.CACHED, statusLabel: "Depuis Cache" };
-                }
-                return res.success && res.data ? res.data : (res.data || null)
-            }).filter(Boolean) as BusinessData[];
-
+            const resultsToProcess = batchResults.map(res => res.success && res.data ? res.data : (res.data || null)).filter(Boolean) as BusinessData[];
             const dbAddResults = await projectService.addResultsToProject(activeProjectId, resultsToProcess);
             
             const projectNames: Record<string, string> = {};
 
-            const finalResults = await Promise.all(dbAddResults.map(async (res) => {
+            const finalResults = await Promise.all(dbAddResults.map(async (res, index) => {
                 if (res.status === 'duplicate' && res.duplicateProjectId && !projectNames[res.duplicateProjectId]) {
                     projectNames[res.duplicateProjectId] = await projectService.getProjectName(res.duplicateProjectId);
                 }
                 if(res.status === 'duplicate') {
-                   res.item.status = ProjectStatus.DUPLICATE;
-                   res.item.statusLabel = `Doublon (Dossier: ${projectNames[res.duplicateProjectId || ''] || 'Inconnu'})`;
+                   res.item.status = `Doublon (Dossier: ${projectNames[res.duplicateProjectId || ''] || 'Inconnu'})`;
                 }
-                if (res.status === 'added' && res.item.searchedTerm && !res.item.statusLabel?.includes("Cache")) {
-                    await cacheService.set(res.item.searchedTerm, res.item);
-                }
+                // FIX: Correlate with `batchResults` using index to check `fromCache` property.
+                if (batchResults[index]?.fromCache === false && res.status === 'added') await cacheService.set(res.item.searchedTerm || res.item.name, res.item);
                 return res.item;
             }));
 
@@ -549,7 +547,7 @@ const AppContent: React.FC = () => {
 
   const filteredData = useMemo(() => {
     let dataToExport = [...state.results];
-    if (exportFilters.excludeClosed) dataToExport = dataToExport.filter(r => r.status !== ProjectStatus.CLOSED && r.status !== ProjectStatus.PERMANENTLY_CLOSED);
+    if (exportFilters.excludeClosed) dataToExport = dataToExport.filter(r => !r.status?.toLowerCase().includes('ferm') && !r.status?.toLowerCase().includes('définitiv'));
     if (exportFilters.excludeNoPhone) dataToExport = dataToExport.filter(r => r.phone && r.phone !== 'N/A' && r.phone.trim() !== '');
     if (exportFilters.onlyWithEmail) dataToExport = dataToExport.filter(r => r.email && r.email.trim() !== '');
     if (exportFilters.excludeDuplicates) {
@@ -586,129 +584,179 @@ const AppContent: React.FC = () => {
   }, [filteredData, activeProjectId, projects, generateInteractiveHTML]);
 
   const stats = useMemo(() => {
-      const actives = state.results.filter(r => r.status === ProjectStatus.ACTIVE || r.status === ProjectStatus.FOUND || r.status === ProjectStatus.CACHED).length;
-      const closed = state.results.filter(r => r.status === ProjectStatus.PERMANENTLY_CLOSED).length;
-      const warnings = state.results.filter(r => [ProjectStatus.CLOSED, ProjectStatus.DUPLICATE, ProjectStatus.IGNORED, ProjectStatus.ERROR, ProjectStatus.WARNING].includes(r.status)).length;
+      const actives = state.results.filter(r => (r.status?.toLowerCase().includes('activ') || r.status?.toLowerCase().includes('ouvert') || r.status?.toLowerCase().includes('web') || r.status?.toLowerCase().includes('trouvé') || r.status?.toLowerCase().includes('(cache)'))).length;
+      const closed = state.results.filter(r => (r.status?.toLowerCase().includes('définitiv') || r.status?.toLowerCase().includes('permanent'))).length;
+      const warnings = state.results.filter(r => (r.status?.toLowerCase().includes('ferm') || r.status?.toLowerCase().includes('doublon') || r.status?.toLowerCase().includes('ignoré') || r.status?.toLowerCase().includes('erreur'))).length;
       const emails = state.results.filter(r => r.email && r.email.trim() !== '').length;
       return { actives, closed, warnings, emails };
   }, [state.results]);
 
-  if (authLoading) { return ( <Suspense fallback={<div className="fixed inset-0 bg-earth-900" />}><LoadingScreen /></Suspense> ); }
+  if (authLoading) { return ( <Suspense fallback={<div className="fixed inset-0 bg-slate-900" />}><LoadingScreen /></Suspense> ); }
   if (!session) { return ( <div className="relative min-h-screen"> <div className="absolute inset-0 bg-slate-100 blur-sm z-0"></div> <AuthOverlay onLoginSuccess={() => setAuthLoading(false)} /> </div> ); }
 
   return (
-    <div className="min-h-screen font-sans text-earth-900">
+    <div className="min-h-screen font-sans text-slate-800">
+      {/* SKIP LINK FOR ACCESSIBILITY */}
+      <a href="#main-content" className="skip-to-content">Aller au contenu principal</a>
       
       <Header projectCount={projects.length} historyCount={historyCount} onLogout={handleLogout} onOpenProjectModal={() => setShowProjectModal(true)} onOpenCacheModal={openCacheModal} onStartTour={startTour} />
 
-      <main className="max-w-[1800px] mx-auto px-4 sm:px-6 lg:px-8 pt-28 pb-24 relative z-[var(--z-base)]">
-        
-        {activeSession && !state.isLoading && (
-            <div className="mb-8 p-4 rounded-xl bg-white border border-amber-100 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 animate-fade-in-up shadow-lg shadow-amber-100/50">
-                <div className="flex items-start gap-3">
-                    <div className="p-2 bg-amber-50 rounded-lg text-amber-600"><PlayCircle className="w-5 h-5" /></div>
-                    <div>
-                        <h3 className="text-sm font-bold text-earth-900">Session précédente détectée</h3>
-                        <p className="text-xs text-slate-500 mt-0.5">Reprendre là où vous vous êtes arrêté ?</p>
+      {/* ARIA LIVE REGION FOR SEARCH STATUS */}
+      <div role="status" aria-live="polite" className="sr-only">
+        {state.isLoading 
+            ? "Recherche en cours..." 
+            : state.results.length > 0 
+                ? `${state.results.length} résultats trouvés.` 
+                : state.error ? `Erreur : ${state.error}` : ""}
+      </div>
+
+      <Container size="lg" className="pt-24 pb-12 md:pt-28 md:pb-24 relative z-10">
+        <main id="main-content">
+            <AnimatePresence mode="wait">
+                <motion.div
+                    key={activeProjectId ? 'project-view' : 'search-view'}
+                    variants={pageVariants}
+                    initial="initial"
+                    animate="animate"
+                    exit="exit"
+                    transition={{ duration: 0.3 }}
+                >
+                    {activeSession && !state.isLoading && (
+                        <div className="mb-8 p-4 rounded-xl bg-white border border-indigo-100 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-lg shadow-indigo-100/50">
+                            <div className="flex items-start gap-3">
+                                <div className="p-2 bg-indigo-50 rounded-lg text-indigo-600"><PlayCircle className="w-5 h-5" /></div>
+                                <div>
+                                    <h3 className="text-sm font-bold text-slate-900">Session précédente détectée</h3>
+                                    <p className="text-xs text-slate-500 mt-0.5">Reprendre là où vous vous êtes arrêté ?</p>
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-3 w-full sm:w-auto">
+                                <Button onClick={discardSession} variant="ghost" size="sm" className="flex-1 sm:flex-none">Ignorer</Button>
+                                <Button onClick={resumeSession} variant="primary" size="sm" leftIcon={<Zap className="w-3.5 h-3.5" />} className="flex-1 sm:flex-none">Reprendre</Button>
+                            </div>
+                        </div>
+                    )}
+
+                    <div className="text-center mb-12 animate-scale-in">
+                    <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full border border-indigo-100 bg-indigo-50 text-indigo-700 text-[11px] font-bold uppercase tracking-wider mb-4 shadow-sm">
+                        <Sparkles className="w-3 h-3 animate-float" />
+                        Vérification Instantanée
                     </div>
-                </div>
-                <div className="flex items-center gap-3 w-full sm:w-auto">
-                    <Button onClick={discardSession} variant="ghost" size="sm">Ignorer</Button>
-                    <Button onClick={resumeSession} size="sm" leftIcon={<Zap className="w-3.5 h-3.5" />}>Reprendre</Button>
-                </div>
-            </div>
-        )}
-
-        <div className="text-center mb-12 animate-scale-in">
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full border border-amber-100 bg-amber-50 text-amber-700 text-[11px] font-bold uppercase tracking-wider mb-4 shadow-sm">
-            <Sparkles className="w-3 h-3 animate-float" />
-            Vérification Instantanée
-          </div>
-          <h2 className="text-4xl sm:text-5xl font-bold text-earth-900 mb-4 tracking-tight">
-            Statut d'entreprise
-          </h2>
-        </div>
-
-        <SearchBar onSearch={handleSearch} isLoading={state.isLoading} projects={projects} activeProjectId={activeProjectId} onSelectProject={selectProjectAndLoadContent} onCreateProject={(name) => { handleCreateProject(name); addToast({type: 'success', title: 'Dossier Créé', message: `Le dossier "${name}" est maintenant actif.`}); }} quotaLimit={quotaLimit} quotaUsed={quotaUsed} onUpdateQuotaLimit={handleUpdateQuotaLimit} onResetQuota={handleResetQuota} />
-
-        <Suspense fallback={<div className="h-40" />}>
-            {state.isBatchMode && (state.isLoading || state.progress.current > 0) && (
-              <BatchProgress progress={state.progress.current} total={state.progress.total} estimatedTimeLeft={estimatedTimeLeft} timelineSteps={timelineSteps} onStop={handleStop} isLoading={state.isLoading} />
-            )}
-        </Suspense>
-
-        {state.error && !state.isLoading && (
-          <div className="max-w-4xl mx-auto mb-8 p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-600 flex items-center justify-center gap-3 animate-fade-in">
-            <AlertOctagon className="w-5 h-5" /> <span>{state.error}</span>
-          </div>
-        )}
-
-        {(state.results.length > 0 || activeProjectId) && (
-          <div className="space-y-6">
-            
-            <DashboardStats stats={stats} />
-
-            <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-6 px-2 mb-4 animate-fade-in">
-              <div className="flex items-center gap-3">
-                <h3 className="text-lg font-semibold text-earth-900 flex items-center gap-3">
-                  <span className="flex items-center justify-center w-7 h-7 bg-earth-900 text-white rounded-full text-xs font-bold shadow-md">{filteredData.length}</span>
-                  Résultats {activeProjectId ? '(Sauvegardé)' : '(Temp)'}
-                </h3>
-                {activeProjectId && (
-                    <div className="flex items-center gap-2">
-                         {!dirHandle ? (
-                            hasStoredHandle ? (
-                                <Button onClick={restoreFolderConnection} variant="outline" size="sm" leftIcon={<RotateCw className="w-3 h-3" />} className="text-amber-600 bg-amber-50 border-amber-200 hover:bg-amber-100 animate-pulse" title="Restaurer l'accès au dossier local pour ce projet">
-                                    <span className="hidden sm:inline">Reconnecter Dossier</span>
-                                </Button>
-                            ) : (
-                                <Button onClick={handleConnectLocalFolder} variant="outline" size="sm" leftIcon={<HardDrive className="w-3 h-3" />} title="Lier un dossier local à ce projet pour la sauvegarde auto">
-                                    <span className="hidden sm:inline">Connecter Dossier Local</span>
-                                </Button>
-                            )
-                         ) : (
-                             <div className="flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold text-emerald-600 bg-emerald-50 border border-emerald-200 rounded-lg shadow-sm" title="Sauvegarde active toutes les 5 minutes">
-                                <Check className="w-3 h-3" />
-                                <span className="hidden sm:inline">Sauvegarde Auto Active</span>
-                                {lastAutoSave && <span className="text-emerald-400 font-normal ml-1">({new Date(lastAutoSave).toLocaleTimeString()})</span>}
-                             </div>
-                         )}
+                    <h2 className="text-4xl sm:text-5xl font-bold text-slate-900 mb-4 tracking-tight">
+                        Statut d'entreprise
+                    </h2>
                     </div>
-                )}
-                <Button onClick={handleClearResults} variant="ghost" size="sm" title="Fermer la vue" aria-label="Fermer la vue des résultats" className="text-slate-400 hover:text-rose-500"><X className="w-4 h-4" /></Button>
-              </div>
-              
-              <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center bg-white p-2 rounded-xl border border-slate-200 shadow-sm w-full xl:w-auto">
-                <Button onClick={() => setShowColumnModal(true)} variant="ghost" size="sm" leftIcon={<TableProperties className="w-3.5 h-3.5" />}>
-                    <span className="hidden sm:inline">Colonnes</span>
-                </Button>
 
-                <div className="w-px h-6 bg-slate-200 hidden sm:block mx-1"></div>
+                    <Suspense fallback={<div className="h-40 bg-white/50 rounded-xl animate-pulse w-full max-w-4xl mx-auto mb-10" />}>
+                        <SearchBar onSearch={handleSearch} isLoading={state.isLoading} projects={projects} activeProjectId={activeProjectId} onSelectProject={selectProjectAndLoadContent} onCreateProject={(name) => { handleCreateProject(name); addToast({type: 'success', title: 'Dossier Créé', message: `Le dossier "${name}" est maintenant actif.`}); }} quotaLimit={quotaLimit} quotaUsed={quotaUsed} onUpdateQuotaLimit={handleUpdateQuotaLimit} onResetQuota={handleResetQuota} />
+                    </Suspense>
 
-                <div className="flex items-center gap-2 px-3 text-xs font-medium text-slate-500 border-r border-slate-100 pr-4 mr-1 hidden sm:flex"><Filter className="w-3.5 h-3.5" /><span>Filtres :</span></div>
-                <div className="flex flex-wrap gap-2">
-                    <button onClick={() => setExportFilters(prev => ({ ...prev, excludeClosed: !prev.excludeClosed }))} className={`px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-all border flex items-center gap-1.5 ${exportFilters.excludeClosed ? 'bg-rose-50 border-rose-200 text-rose-600' : 'bg-slate-50 border-slate-100 text-slate-500 hover:bg-white hover:border-slate-300'}`}>{exportFilters.excludeClosed ? <Check className="w-3 h-3" /> : <div className="w-3 h-3" />}Actifs</button>
-                    <button onClick={() => setExportFilters(prev => ({ ...prev, excludeNoPhone: !prev.excludeNoPhone }))} className={`px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-all border flex items-center gap-1.5 ${exportFilters.excludeNoPhone ? 'bg-amber-50 border-amber-200 text-amber-600' : 'bg-slate-50 border-slate-100 text-slate-500 hover:bg-white hover:border-slate-300'}`}>{exportFilters.excludeNoPhone ? <Check className="w-3 h-3" /> : <div className="w-3 h-3" />}Avec Tél</button>
-                    <button onClick={() => setExportFilters(prev => ({ ...prev, onlyWithEmail: !prev.onlyWithEmail }))} className={`px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-all border flex items-center gap-1.5 ${exportFilters.onlyWithEmail ? 'bg-amber-50 border-amber-200 text-amber-600' : 'bg-slate-50 border-slate-100 text-slate-500 hover:bg-white hover:border-slate-300'}`}>{exportFilters.onlyWithEmail ? <Check className="w-3 h-3" /> : <div className="w-3 h-3" />}Avec Email</button>
-                </div>
-                <div className="flex items-center gap-2 ml-auto">
-                    <Button onClick={downloadHTML} variant="outline" size="sm" title="Télécharger Mini-App HTML autonome"><FileCode className="w-3.5 h-3.5" /></Button>
-                    <Button onClick={downloadJSON} variant="outline" size="sm" title="Télécharger JSON"><FileJson className="w-3.5 h-3.5" /></Button>
-                    <Button onClick={downloadExcel} variant="primary" size="sm" leftIcon={<FileSpreadsheet className="w-3.5 h-3.5 group-hover:animate-bounce" />} className="whitespace-nowrap">Excel</Button>
-                </div>
-              </div>
-            </div>
+                    <Suspense fallback={<div className="h-40" />}>
+                        {state.isBatchMode && (state.isLoading || state.progress.current > 0) && (
+                        <BatchProgress progress={state.progress.current} total={state.progress.total} estimatedTimeLeft={estimatedTimeLeft} timelineSteps={timelineSteps} onStop={handleStop} isLoading={state.isLoading} />
+                        )}
+                    </Suspense>
 
-            <ResultTable data={filteredData} onUpdate={handleUpdateResult} columnLabels={columnLabels} />
+                    {state.error && !state.isLoading && (
+                    <div className="max-w-4xl mx-auto mb-8 p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-600 flex items-center justify-center gap-3 animate-fade-in" role="alert">
+                        <AlertOctagon className="w-5 h-5" /> <span>{state.error}</span>
+                    </div>
+                    )}
 
-            <div className="mt-8 p-4 rounded-xl bg-white border border-slate-200 text-xs text-slate-500 flex items-start gap-3 max-w-2xl mx-auto shadow-sm animate-fade-in">
-               <Info className="w-4 h-4 mt-0.5 shrink-0 text-amber-500" />
-               <div className="space-y-1">
-                 <p>Les données sont enregistrées automatiquement en local. Aucune donnée ne transite vers nos serveurs.</p>
-               </div>
-            </div>
-          </div>
-        )}
+                    {(state.results.length > 0 || activeProjectId) && (
+                    <div className="space-y-6">
+                        
+                        <DashboardStats stats={stats} />
+
+                        <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-6 px-2 mb-4 animate-fade-in">
+                        <div className="flex items-center gap-3">
+                            <h3 className="text-lg font-semibold text-slate-800 flex items-center gap-3">
+                            <span className="flex items-center justify-center w-7 h-7 bg-slate-900 text-white rounded-full text-xs font-bold shadow-md">{filteredData.length}</span>
+                            Résultats {activeProjectId ? '(Sauvegardé)' : '(Temp)'}
+                            </h3>
+                            {activeProjectId && (
+                                <div className="flex items-center gap-2">
+                                    {!dirHandle ? (
+                                        hasStoredHandle ? (
+                                            <Button onClick={restoreFolderConnection} variant="secondary" size="xs" leftIcon={<RotateCw className="w-3 h-3" />} className="text-indigo-600 bg-indigo-50 border-indigo-200 hover:bg-indigo-100 animate-pulse">
+                                                <span className="hidden sm:inline">Reconnecter Dossier</span>
+                                            </Button>
+                                        ) : (
+                                            <Button onClick={handleConnectLocalFolder} variant="secondary" size="xs" leftIcon={<HardDrive className="w-3 h-3" />} title="Lier un dossier local à ce projet pour la sauvegarde auto">
+                                                <span className="hidden sm:inline">Connecter Dossier Local</span>
+                                            </Button>
+                                        )
+                                    ) : (
+                                        <div className="flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold text-emerald-600 bg-emerald-50 border border-emerald-200 rounded-lg shadow-sm" title="Sauvegarde active toutes les 5 minutes">
+                                            <Check className="w-3 h-3" />
+                                            <span className="hidden sm:inline">Sauvegarde Auto Active</span>
+                                            {lastAutoSave && <span className="text-emerald-400 font-normal ml-1">({new Date(lastAutoSave).toLocaleTimeString()})</span>}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                            <Button onClick={handleClearResults} variant="ghost" size="icon" className="text-slate-400 hover:text-rose-500 hover:bg-rose-50" title="Fermer la vue" aria-label="Fermer les résultats"><X className="w-4 h-4" /></Button>
+                        </div>
+                        
+                        <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center bg-white p-2 rounded-xl border border-slate-200 shadow-sm w-full xl:w-auto">
+                            <Button onClick={() => setShowColumnModal(true)} variant="ghost" size="sm" leftIcon={<TableProperties className="w-3.5 h-3.5" />}>
+                                <span className="hidden sm:inline">Colonnes</span>
+                            </Button>
+
+                            <div className="w-px h-6 bg-slate-200 hidden sm:block mx-1"></div>
+
+                            <div className="flex items-center gap-2 px-3 text-xs font-medium text-slate-500 border-r border-slate-100 pr-4 mr-1 hidden sm:flex"><Filter className="w-3.5 h-3.5" /><span>Filtres :</span></div>
+                            <div className="flex flex-wrap gap-2">
+                                <Button 
+                                    onClick={() => setExportFilters(prev => ({ ...prev, excludeClosed: !prev.excludeClosed }))} 
+                                    variant={exportFilters.excludeClosed ? "danger-light" : "secondary"}
+                                    size="xs"
+                                    leftIcon={exportFilters.excludeClosed ? <Check className="w-3 h-3" /> : undefined}
+                                >
+                                    Actifs
+                                </Button>
+                                <Button 
+                                    onClick={() => setExportFilters(prev => ({ ...prev, excludeNoPhone: !prev.excludeNoPhone }))} 
+                                    variant={exportFilters.excludeNoPhone ? "secondary" : "secondary"}
+                                    className={exportFilters.excludeNoPhone ? "bg-amber-50 text-amber-600 border-amber-200" : ""}
+                                    size="xs"
+                                    leftIcon={exportFilters.excludeNoPhone ? <Check className="w-3 h-3" /> : undefined}
+                                >
+                                    Avec Tél
+                                </Button>
+                                <Button 
+                                    onClick={() => setExportFilters(prev => ({ ...prev, onlyWithEmail: !prev.onlyWithEmail }))} 
+                                    variant={exportFilters.onlyWithEmail ? "primary" : "secondary"}
+                                    className={exportFilters.onlyWithEmail ? "bg-indigo-50 text-indigo-600 border-indigo-200 shadow-none hover:bg-indigo-100" : ""}
+                                    size="xs"
+                                    leftIcon={exportFilters.onlyWithEmail ? <Check className="w-3 h-3" /> : undefined}
+                                >
+                                    Avec Email
+                                </Button>
+                            </div>
+                            <div className="flex items-center gap-2 ml-auto">
+                                <Button onClick={downloadHTML} variant="secondary" size="sm" leftIcon={<FileCode className="w-3.5 h-3.5" />} className="group hover-lift" title="Télécharger Mini-App HTML" aria-label="Télécharger en HTML" />
+                                <Button onClick={downloadJSON} variant="secondary" size="sm" leftIcon={<FileJson className="w-3.5 h-3.5" />} className="group hover-lift" title="Télécharger JSON" aria-label="Télécharger en JSON" />
+                                <Button onClick={downloadExcel} variant="primary" size="sm" leftIcon={<FileSpreadsheet className="w-3.5 h-3.5" />} className="group hover-lift whitespace-nowrap" aria-label="Télécharger en Excel">Excel</Button>
+                            </div>
+                        </div>
+                        </div>
+
+                        <Suspense fallback={<div className="h-[50vh] bg-white/50 rounded-xl animate-pulse" />}>
+                            <ResultTable data={filteredData} onUpdate={handleUpdateResult} columnLabels={columnLabels} />
+                        </Suspense>
+
+                        <div className="mt-8 p-4 rounded-xl bg-white border border-slate-200 text-xs text-slate-500 flex items-start gap-3 max-w-2xl mx-auto shadow-sm animate-fade-in">
+                        <Info className="w-4 h-4 mt-0.5 shrink-0 text-indigo-500" />
+                        <div className="space-y-1">
+                            <p>Les données sont enregistrées automatiquement en local. Aucune donnée ne transite vers nos serveurs.</p>
+                        </div>
+                        </div>
+                    </div>
+                    )}
+                </motion.div>
+            </AnimatePresence>
+        </main>
         
         <Suspense fallback={<div className="fixed inset-0 bg-black/10 z-[101]" />}>
             <ProjectModal isOpen={showProjectModal} onClose={() => setShowProjectModal(false)} projects={projects} activeProjectId={activeProjectId} onSelectProject={selectProjectAndLoadContent} onDeleteProject={handleDeleteProject} onExportProject={handleExportProject} />
@@ -717,7 +765,7 @@ const AppContent: React.FC = () => {
             <OnboardingGuide isOpen={isTourActive} onClose={endTour} />
         </Suspense>
         
-      </main>
+      </Container>
     </div>
   );
 };

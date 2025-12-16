@@ -91,7 +91,7 @@ export const searchWithSerper = async (
   let searchQuality: 'GOOD' | 'FALLBACK' | 'EMPTY' = 'EMPTY';
 
   const useMaps = strategy.startsWith('maps');
-  const enrichWithWeb = strategy === 'maps_web_enrich' || strategy === 'maps_web_leadgen';
+  const enrichWithWeb = strategy === 'maps_web_enrich';
   const mainQueryFallback = `${query} (adresse OR téléphone OR contact OR email OR courriel) -jobs -careers -indeed`;
   
   if (useMaps) {

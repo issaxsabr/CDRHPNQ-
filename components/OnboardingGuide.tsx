@@ -1,6 +1,7 @@
 
 import React, { useState, useLayoutEffect } from 'react';
 import { X, ArrowLeft, ArrowRight, Zap, PartyPopper } from 'lucide-react';
+import Button from './ui/Button';
 
 interface OnboardingStep {
   targetId: string;
@@ -161,10 +162,10 @@ const OnboardingGuide: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ i
 
   return (
     <>
-      <div className="fixed inset-0 bg-[#403E37]/60 z-[1000]" onClick={isModalStep ? undefined : handleClose} />
+      <div className="fixed inset-0 bg-earth-900/60 z-[1000]" onClick={isModalStep ? undefined : handleClose} />
       
       <div 
-        className="fixed z-[1100] w-80 bg-white rounded-xl shadow-2xl p-5 transition-all duration-300 animate-fade-in-up" 
+        className="fixed z-[1100] w-[90vw] max-w-xs sm:w-80 bg-white rounded-xl shadow-2xl p-5 transition-all duration-300 animate-fade-in-up" 
         style={position}
       >
         <div className="flex justify-between items-start mb-3">
@@ -172,24 +173,29 @@ const OnboardingGuide: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ i
             <div className={`w-8 h-8 rounded-full flex items-center justify-center ${isLastStep ? 'bg-emerald-100 text-emerald-600' : 'bg-yellow-100 text-yellow-600'}`}>
               {isLastStep ? <PartyPopper className="w-5 h-5" /> : <Zap className="w-5 h-5" />}
             </div>
-            <h3 className="font-bold text-[#403E37]">{step.title}</h3>
+            <h3 className="font-bold text-earth-900">{step.title}</h3>
           </div>
-          <button onClick={handleClose} className="text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
+          <Button onClick={handleClose} variant="ghost" size="icon" rounded="full" className="w-6 h-6 hover:bg-beige-100 text-earth-500"><X className="w-4 h-4" /></Button>
         </div>
-        <p className="text-sm text-[#8B865F] mb-5">{step.content}</p>
+        <p className="text-sm text-earth-500 mb-5">{step.content}</p>
 
         <div className="flex items-center justify-between">
-          <span className="text-xs font-mono text-slate-400">{currentStep + 1} / {STEPS.length}</span>
+          <span className="text-xs font-mono text-earth-500/70">{currentStep + 1} / {STEPS.length}</span>
           <div className="flex items-center gap-2">
             {currentStep > 0 && (
-              <button onClick={handlePrev} className="p-2 text-slate-500 hover:bg-slate-100 rounded-md">
+              <Button onClick={handlePrev} variant="secondary" size="icon" className="text-earth-500">
                 <ArrowLeft className="w-4 h-4" />
-              </button>
+              </Button>
             )}
-            <button onClick={handleNext} className="px-4 py-2 text-sm font-semibold text-white bg-black rounded-lg btn-modern flex items-center gap-2">
+            <Button 
+                onClick={handleNext} 
+                variant="primary" 
+                size="sm" 
+                className="bg-earth-900 text-beige-100 hover:bg-earth-700"
+                rightIcon={!isLastStep && <ArrowRight className="w-4 h-4" />}
+            >
               {isLastStep ? 'Terminer' : 'Suivant'}
-              {!isLastStep && <ArrowRight className="w-4 h-4" />}
-            </button>
+            </Button>
           </div>
         </div>
       </div>

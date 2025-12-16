@@ -9,7 +9,6 @@ export const CONFIG = {
   COSTS: {
     web_basic: 1,
     maps_basic: 3,
-    maps_web_enrich: 4,
-    maps_web_leadgen: 8
+    maps_web_enrich: 4
   }
 } as const;

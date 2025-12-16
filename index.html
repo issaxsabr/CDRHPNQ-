@@ -8,13 +8,84 @@
     
     <!-- PWA Settings -->
     <link rel="manifest" href="/manifest.json">
-    <meta name="theme-color" content="#EBE6DA">
+    <meta name="theme-color" content="#E0D8CC">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <meta name="apple-mobile-web-app-title" content="Scavenger">
     <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/2838/2838912.png">
 
     <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          screens: {
+            'xs': '475px',
+            'sm': '640px',
+            'md': '768px',
+            'lg': '1024px',
+            'xl': '1280px',
+            '2xl': '1536px'
+          },
+          extend: {
+            colors: {
+              beige: {
+                50: '#F5F3EF',
+                100: '#EBE6DA', /* Updated from Design System */
+                200: '#E3DED0', /* Updated from Design System */
+                300: '#D6D2C9'
+              },
+              earth: {
+                900: '#403E37',
+                700: '#5A5850',
+                500: '#8B865F'
+              },
+              gold: {
+                500: '#FCC036',
+                600: '#D97706'
+              }
+            },
+            spacing: {
+              '18': '4.5rem',
+              '88': '22rem',
+              '128': '32rem'
+            },
+            borderRadius: {
+              'xl': '1rem',
+              '2xl': '1.5rem'
+            },
+            boxShadow: {
+              'elegant': '0 4px 6px -1px rgba(0, 0, 0, 0.03), 0 2px 4px -2px rgba(0, 0, 0, 0.03)',
+              'gold': '0 0 20px rgba(252, 192, 54, 0.4)'
+            },
+            animation: {
+              'fade-in-up': 'fadeInUp 0.5s ease-out',
+              'scale-in': 'scaleIn 0.3s ease-out',
+              'float': 'float 3s ease-in-out infinite',
+              'spin-slow': 'spin-slow 10s linear infinite'
+            },
+            keyframes: {
+              fadeInUp: {
+                '0%': { opacity: '0', transform: 'translateY(10px)' },
+                '100%': { opacity: '1', transform: 'translateY(0)' },
+              },
+              scaleIn: {
+                '0%': { opacity: '0', transform: 'scale(.95)' },
+                '100%': { opacity: '1', transform: 'scale(1)' },
+              },
+              float: {
+                '0%': { transform: 'translateY(0px)' },
+                '50%': { transform: 'translateY(-3px)' },
+                '100%': { transform: 'translateY(0px)' },
+              },
+              'spin-slow': {
+                'from': { transform: 'rotate(0deg)' },
+                'to': { transform: 'rotate(360deg)' }
+              }
+            }
+          }
+        }
+      }
+    </script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     
@@ -34,15 +105,16 @@
     "lz-string": "https://esm.sh/lz-string@1.5.0",
     "zod": "https://esm.sh/zod@3.23.8",
     "isomorphic-dompurify": "https://esm.sh/isomorphic-dompurify@1.9.0",
-    "xlsx": "https://esm.sh/xlsx@^0.18.5"
+    "xlsx": "https://esm.sh/xlsx@^0.18.5",
+    "framer-motion": "https://esm.sh/framer-motion@10.16.4?external=react,react-dom"
   }
 }
 </script>
 </head>
-  <body class="antialiased min-h-screen relative selection:bg-yellow-200 selection:text-yellow-900">
+  <body class="antialiased min-h-screen relative selection:bg-gold-500/30 selection:text-earth-900">
     <div class="bg-grid-pattern"></div>
     <div class="glow-blob top-[-20%] left-[-10%]"></div>
-    <div class="glow-blob bottom-[-20%] right-[-10%]" style="animation-delay: -10s; background: radial-gradient(circle, rgba(139, 134, 95, 0.08) 0%, rgba(235, 230, 218, 0) 70%);"></div>
+    <div class="glow-blob bottom-[-20%] right-[-10%]" style="animation-delay: -10s; background: radial-gradient(circle, rgba(139, 134, 95, 0.08) 0%, rgba(224, 216, 204, 0) 70%);"></div>
     <div id="root"></div>
   </body>
 </html>

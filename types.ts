@@ -1,16 +1,3 @@
-export enum ProjectStatus {
-  ACTIVE = 'active',
-  CACHED = 'cached',
-  FOUND = 'found',
-  CLOSED = 'closed',
-  PERMANENTLY_CLOSED = 'permanently_closed',
-  NOT_FOUND = 'not_found',
-  DUPLICATE = 'duplicate',
-  IGNORED = 'ignored',
-  ERROR = 'error',
-  WARNING = 'warning',
-  CHECKING = 'checking'
-}
 
 export interface ContactPerson {
   name: string;
@@ -18,12 +5,24 @@ export interface ContactPerson {
   email?: string; // Email spécifique à cette personne
 }
 
+export enum ProjectStatus {
+  ACTIVE = 'active',
+  CACHED = 'cached',
+  FOUND = 'found',
+  CLOSED = 'closed',
+  NOT_FOUND = 'not_found',
+  DUPLICATE = 'duplicate',
+  IGNORED = 'ignored',
+  ERROR = 'error',
+  WARNING = 'warning',
+  UNKNOWN = 'unknown'
+}
+
 export interface BusinessData {
   id?: string; // UUID unique pour chaque enregistrement dans la DB
   projectId?: string; // ID du projet parent
   name: string;
-  status: ProjectStatus;
-  statusLabel?: string; // Pour les détails dynamiques (ex: nom du dossier dupliqué)
+  status: string; // Statut opérationnel (Ouvert, Fermé...) - Mapped to ProjectStatus in UI
   address: string;
   phone: string;
   phones?: string[]; // Liste de tous les téléphones trouvés
@@ -35,6 +34,7 @@ export interface BusinessData {
   // Nouveaux champs enrichis (Serper Places)
   website?: string;
   category?: string;
+  // Note: rating, ratingCount, priceLevel supprimés car non utilisés
   
   // Champs LeadGen
   email?: string;
@@ -78,7 +78,7 @@ export interface Project {
 }
 
 export type ScraperProvider = 'serper_eco'; // Simplification : On garde uniquement le mode performant
-export type SerperStrategy = 'maps_basic' | 'web_basic' | 'maps_web_enrich' | 'maps_web_leadgen';
+export type SerperStrategy = 'maps_basic' | 'web_basic' | 'maps_web_enrich';
 
 // Provinces Canadiennes
 export type CountryCode = 'qc' | 'on' | 'bc' | 'ab' | 'mb' | 'sk' | 'ns' | 'nb' | 'nl' | 'pe' | 'yt' | 'nt' | 'nu';
