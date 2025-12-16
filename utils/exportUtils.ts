@@ -1,4 +1,3 @@
-
 import { BusinessData, ColumnLabelMap } from '../types';
 import ExcelJS from 'exceljs';
 
@@ -24,7 +23,7 @@ export const getInteractiveHTMLContent = (data: BusinessData[], projectName: str
   <style>
       body { font-family: 'Inter', sans-serif; background-color: #F8FAFC; color: #0F172A; }
       .cell-edit:hover { background-color: #F1F5F9; cursor: pointer; border-radius: 4px; }
-      .cell-edit:focus { background-color: white; outline: 2px solid #6366f1; }
+      .cell-edit:focus { background-color: white; outline: 2px solid #FCC036; }
       ::-webkit-scrollbar { width: 8px; height: 8px; }
       ::-webkit-scrollbar-track { background: transparent; }
       ::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 4px; border: 2px solid #F8FAFC; }
@@ -34,7 +33,7 @@ export const getInteractiveHTMLContent = (data: BusinessData[], projectName: str
   <!-- HEADER -->
   <header class="bg-white border-b border-slate-200 h-16 shrink-0 flex items-center justify-between px-6 z-20 shadow-sm">
       <div class="flex items-center gap-3">
-          <div class="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center">
+          <div class="w-8 h-8 bg-gold-500 rounded-lg flex items-center justify-center">
               <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2-2z"></path></svg>
           </div>
           <div>
@@ -47,9 +46,9 @@ export const getInteractiveHTMLContent = (data: BusinessData[], projectName: str
               <div class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-slate-400">
                   <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
               </div>
-              <input type="text" id="search" placeholder="Filtrer..." class="pl-10 pr-4 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-500 w-64 transition-all">
+              <input type="text" id="search" placeholder="Filtrer..." class="pl-10 pr-4 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-gold-500 w-64 transition-all">
            </div>
-           <button onclick="exportData()" class="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-semibold shadow-md transition-all active:scale-95">
+           <button onclick="exportData()" class="flex items-center gap-2 bg-gold-500 hover:bg-gold-600 text-white px-4 py-2 rounded-lg text-sm font-semibold shadow-md transition-all active:scale-95">
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
               Sauvegarder (.xlsx)
            </button>
@@ -64,7 +63,7 @@ export const getInteractiveHTMLContent = (data: BusinessData[], projectName: str
                   <tr>
                       <th scope="col" class="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider sticky left-0 bg-slate-50 z-20 border-r border-slate-200">Entreprise</th>
                       <th scope="col" class="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider" id="lbl-status">Statut</th>
-                      <th scope="col" class="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider text-indigo-600 bg-indigo-50/50" id="lbl-custom">Memo</th>
+                      <th scope="col" class="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider text-gold-600 bg-gold-500/10" id="lbl-custom">Memo</th>
                       <th scope="col" class="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider" id="lbl-cat">Catégorie</th>
                       <th scope="col" class="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider" id="lbl-addr">Adresse</th>
                       <th scope="col" class="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider" id="lbl-phone">Téléphone</th>
@@ -110,13 +109,13 @@ export const getInteractiveHTMLContent = (data: BusinessData[], projectName: str
               // DECISION MAKER BADGE HTML
               let dmHtml = '';
               if(dm) {
-                 dmHtml = \`<div class="flex items-center gap-1.5 text-[10px] font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100 w-fit mb-1"><svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg> \${dm.name}</div>\`;
+                 dmHtml = \`<div class="flex items-center gap-1.5 text-[10px] font-bold text-gold-700 bg-gold-500/10 px-2 py-0.5 rounded border border-gold-500/20 w-fit mb-1"><svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg> \${dm.name}</div>\`;
               }
 
               tr.innerHTML = \`
                   <td class="px-6 py-4 whitespace-nowrap sticky left-0 bg-white group-hover:bg-slate-50 border-r border-slate-100 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">
                       <div class="text-sm font-semibold text-slate-900 cell-edit p-1" contenteditable="true" onblur="updateData(\${index}, 'name', this.innerText)">\${item.name}</div>
-                      \${item.website ? \`<a href="\${item.website}" target="_blank" class="text-[10px] text-indigo-500 hover:underline flex items-center gap-1 mt-0.5">Website <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg></a>\` : ''}
+                      \${item.website ? \`<a href="\${item.website}" target="_blank" class="text-[10px] text-gold-500 hover:underline flex items-center gap-1 mt-0.5">Website <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg></a>\` : ''}
                   </td>
                   <td class="px-6 py-4 whitespace-nowrap">
                       <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full \${item.status.toLowerCase().includes('ferm') ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'}">

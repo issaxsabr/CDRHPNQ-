@@ -1,16 +1,16 @@
-
 import React, { useState } from 'react';
 import { supabase } from '../services/supabase';
-import { Lock, Mail, ArrowRight, ShieldCheck, AlertTriangle } from 'lucide-react';
+import { Lock, Mail, ArrowRight, ShieldCheck, AlertTriangle, EyeOff } from 'lucide-react';
 import Button from './ui/Button';
 import Input from './ui/Input';
 import Card from './ui/Card';
 
 interface AuthOverlayProps {
     onLoginSuccess: () => void;
+    onBypass?: () => void;
 }
 
-const AuthOverlay: React.FC<AuthOverlayProps> = ({ onLoginSuccess }) => {
+const AuthOverlay: React.FC<AuthOverlayProps> = ({ onLoginSuccess, onBypass }) => {
     const [step, setStep] = useState<'email' | 'otp'>('email');
     const [email, setEmail] = useState('');
     const [otp, setOtp] = useState('');
@@ -105,13 +105,13 @@ const AuthOverlay: React.FC<AuthOverlayProps> = ({ onLoginSuccess }) => {
     return (
         <div className="fixed inset-0 z-[100] bg-earth-900/50 backdrop-blur-sm flex items-center justify-center p-4">
             <div className="w-full max-w-md animate-scale-in">
-                <Card glass className="p-0 overflow-hidden shadow-2xl">
+                <Card glass className="p-0 overflow-hidden shadow-2xl border-beige-200/50">
                     {/* Header */}
-                    <div className="bg-beige-50/50 border-b border-beige-200 p-6 flex flex-col items-center text-center">
-                        <div className="w-12 h-12 bg-yellow-100 text-yellow-600 rounded-xl flex items-center justify-center mb-3 shadow-inner">
+                    <div className="bg-beige-100/40 border-b border-beige-200/60 p-6 flex flex-col items-center text-center">
+                        <div className="w-12 h-12 bg-gradient-to-br from-yellow-50 to-yellow-100 text-yellow-600 rounded-xl flex items-center justify-center mb-3 shadow-sm border border-yellow-200/50">
                             {step === 'email' ? <Lock className="w-6 h-6" /> : <ShieldCheck className="w-6 h-6" />}
                         </div>
-                        <h2 className="text-xl font-bold text-earth-900 gradient-text">
+                        <h2 className="text-xl font-bold text-earth-900">
                             {step === 'email' ? 'Espace de Connexion' : 'Vérification OTP'}
                         </h2>
                         <p className="text-sm text-earth-500 mt-1">
@@ -122,7 +122,7 @@ const AuthOverlay: React.FC<AuthOverlayProps> = ({ onLoginSuccess }) => {
                     </div>
 
                     {/* Body */}
-                    <div className="p-6 bg-white">
+                    <div className="p-6 bg-beige-100/40">
                         {error && (
                             <div className="mb-4 p-3 bg-rose-50 border border-rose-100 text-rose-600 text-xs rounded-lg flex items-start gap-2 animate-pulse">
                                 <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
@@ -141,7 +141,7 @@ const AuthOverlay: React.FC<AuthOverlayProps> = ({ onLoginSuccess }) => {
                                     onChange={(e) => setEmail(e.target.value)}
                                     placeholder="nom@entreprise.com"
                                     leftIcon={<Mail className="w-4 h-4" />}
-                                    className="bg-beige-50/50"
+                                    className="bg-white border-beige-200 focus:border-gold-500 shadow-sm"
                                 />
                                 <Button 
                                     type="submit" 
@@ -153,6 +153,27 @@ const AuthOverlay: React.FC<AuthOverlayProps> = ({ onLoginSuccess }) => {
                                 >
                                     Recevoir le code
                                 </Button>
+
+                                {onBypass && (
+                                    <div className="pt-2">
+                                        <div className="relative flex py-2 items-center">
+                                            <div className="flex-grow border-t border-beige-200"></div>
+                                            <span className="flex-shrink-0 mx-2 text-[10px] text-beige-300 font-bold tracking-wider">DEV ONLY</span>
+                                            <div className="flex-grow border-t border-beige-200"></div>
+                                        </div>
+                                        <Button
+                                            type="button"
+                                            onClick={onBypass}
+                                            fullWidth
+                                            variant="ghost"
+                                            size="sm"
+                                            className="text-earth-500 hover:text-gold-600 hover:bg-white/50"
+                                            leftIcon={<EyeOff className="w-4 h-4" />}
+                                        >
+                                            Mode Démo (Accès invité)
+                                        </Button>
+                                    </div>
+                                )}
                             </form>
                         ) : (
                             <form onSubmit={handleVerifyOtp} className="space-y-4">
@@ -167,7 +188,7 @@ const AuthOverlay: React.FC<AuthOverlayProps> = ({ onLoginSuccess }) => {
                                     maxLength={8}
                                     value={otp}
                                     onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
-                                    className="text-center text-2xl font-mono tracking-[0.2em] bg-beige-50/50"
+                                    className="text-center text-2xl font-mono tracking-[0.2em] bg-white border-beige-200 focus:border-gold-500 shadow-sm"
                                     placeholder="000000"
                                 />
                                 <p className="text-[10px] text-center text-earth-500">Vérifiez vos spams si vous ne recevez rien.</p>
@@ -186,7 +207,7 @@ const AuthOverlay: React.FC<AuthOverlayProps> = ({ onLoginSuccess }) => {
                                 <button 
                                     type="button" 
                                     onClick={() => { setStep('email'); setError(null); setOtp(''); }}
-                                    className="w-full text-xs text-earth-500 hover:text-gold-600 mt-2 py-1 text-center"
+                                    className="w-full text-xs text-earth-500 hover:text-gold-600 mt-2 py-1 text-center font-medium"
                                 >
                                     Modifier l'email
                                 </button>
@@ -195,7 +216,7 @@ const AuthOverlay: React.FC<AuthOverlayProps> = ({ onLoginSuccess }) => {
                     </div>
                     
                     {/* Footer */}
-                    <div className="bg-beige-50/50 p-4 border-t border-beige-200 text-center">
+                    <div className="bg-beige-100/40 p-4 border-t border-beige-200/60 text-center">
                         <p className="text-[10px] text-earth-500">
                             Accès sécurisé et restreint.
                         </p>

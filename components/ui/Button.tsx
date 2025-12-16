@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { Loader2 } from 'lucide-react';
 
@@ -31,11 +30,11 @@ const Button: React.FC<ButtonProps> = ({
   const baseClasses = 'btn-modern inline-flex items-center justify-center font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none btn-ripple';
 
   const variantClasses: Record<ButtonVariant, string> = {
-    primary: 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-md border border-transparent',
-    secondary: 'bg-white text-earth-700 border border-slate-200 hover:bg-slate-50 hover:text-earth-900 shadow-sm', // Modifié pour être plus proche de la spec UI du prompt
+    primary: 'bg-gold-500 text-white hover:bg-gold-600 shadow-md border border-transparent',
+    secondary: 'bg-white text-earth-700 border border-beige-300 hover:bg-beige-50 hover:text-earth-900 shadow-sm',
     danger: 'bg-rose-500 text-white hover:bg-rose-600 shadow-md',
-    ghost: 'bg-transparent text-earth-700 hover:bg-slate-100',
-    outline: 'bg-white text-earth-900 border border-slate-300 hover:border-slate-400',
+    ghost: 'bg-transparent text-earth-700 hover:bg-beige-100',
+    outline: 'bg-white text-earth-900 border border-beige-300 hover:border-beige-200 hover:bg-beige-50',
     'danger-light': 'bg-rose-50 text-rose-600 border border-rose-200 hover:bg-rose-100',
     glass: 'bg-white/10 text-beige-100 border border-white/20 hover:bg-white/20 backdrop-blur-sm shadow-sm',
     'glass-danger': 'bg-white/10 text-rose-300 border border-rose-200/20 hover:bg-rose-500/30 backdrop-blur-sm shadow-sm'

@@ -1,4 +1,3 @@
-
 html {
   background-color: #EBE6DA; /* beige-100 updated */
 }
@@ -290,19 +289,19 @@ body {
   width: 100%;
   padding: 0.5rem 1rem;
   background-color: #ffffff;
-  border: 1px solid #e2e8f0; /* slate-200 */
+  border: 1px solid #D6D2C9; /* beige-300 */
   border-radius: 0.5rem; /* rounded-lg */
   outline: none;
   transition: all 0.2s ease;
   font-size: 0.875rem; /* text-sm */
-  color: #1e293b; /* slate-800 */
+  color: #403E37; /* earth-900 */
 }
 .input-base:focus {
-  border-color: #6366f1; /* indigo-500 */
-  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
+  border-color: #FCC036; /* gold-500 */
+  box-shadow: 0 0 0 2px rgba(252, 192, 54, 0.2);
 }
 .input-base::placeholder {
-  color: #94a3b8; /* slate-400 */
+  color: #8B865F; /* earth-500 */
 }
 
 .input-error {

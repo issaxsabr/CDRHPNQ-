@@ -1,4 +1,3 @@
-
 import React, { useState, useCallback, useEffect, useMemo, lazy, Suspense } from 'react';
 import { Session } from '@supabase/supabase-js';
 import { Info, Sparkles, Filter, Check, PlayCircle, X, FileJson, AlertOctagon, RotateCw, HardDrive, TableProperties, FileCode, FileSpreadsheet, Zap } from 'lucide-react';
@@ -178,6 +177,35 @@ const AppContent: React.FC = () => {
 
   const handleLogout = async () => {
       await supabase.auth.signOut();
+      setSession(null);
+  };
+
+  const handleBypassAuth = () => {
+      // Create a fake session for demo purposes
+      const fakeSession = {
+          access_token: 'demo_token',
+          refresh_token: 'demo_refresh',
+          expires_in: 3600,
+          token_type: 'bearer',
+          user: {
+              id: 'demo-user',
+              aud: 'authenticated',
+              role: 'authenticated',
+              email: 'demo@scavenger.app',
+              email_confirmed_at: new Date().toISOString(),
+              phone: '',
+              confirmed_at: new Date().toISOString(),
+              last_sign_in_at: new Date().toISOString(),
+              app_metadata: { provider: 'email' },
+              user_metadata: {},
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+          }
+      } as unknown as Session;
+      
+      setSession(fakeSession);
+      setAuthLoading(false);
+      addToast({ type: 'info', title: 'Mode Démo Activé', message: 'Vous utilisez une session locale simulée.' });
   };
 
   const saveColumnLabels = (newLabels: ColumnLabelMap) => {
@@ -591,11 +619,18 @@ const AppContent: React.FC = () => {
       return { actives, closed, warnings, emails };
   }, [state.results]);
 
-  if (authLoading) { return ( <Suspense fallback={<div className="fixed inset-0 bg-slate-900" />}><LoadingScreen /></Suspense> ); }
-  if (!session) { return ( <div className="relative min-h-screen"> <div className="absolute inset-0 bg-slate-100 blur-sm z-0"></div> <AuthOverlay onLoginSuccess={() => setAuthLoading(false)} /> </div> ); }
+  if (authLoading) { return ( <Suspense fallback={<div className="fixed inset-0 bg-earth-900" />}><LoadingScreen /></Suspense> ); }
+  if (!session) { 
+      return ( 
+        <div className="relative min-h-screen"> 
+            <div className="absolute inset-0 bg-beige-100 blur-sm z-0"></div> 
+            <AuthOverlay onLoginSuccess={() => setAuthLoading(false)} onBypass={handleBypassAuth} /> 
+        </div> 
+      ); 
+  }
 
   return (
-    <div className="min-h-screen font-sans text-slate-800">
+    <div className="min-h-screen font-sans text-earth-900">
       {/* SKIP LINK FOR ACCESSIBILITY */}
       <a href="#main-content" className="skip-to-content">Aller au contenu principal</a>
       
@@ -622,12 +657,12 @@ const AppContent: React.FC = () => {
                     transition={{ duration: 0.3 }}
                 >
                     {activeSession && !state.isLoading && (
-                        <div className="mb-8 p-4 rounded-xl bg-white border border-indigo-100 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-lg shadow-indigo-100/50">
+                        <div className="mb-8 p-4 rounded-xl bg-white border border-gold-500/20 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-lg shadow-gold-500/10">
                             <div className="flex items-start gap-3">
-                                <div className="p-2 bg-indigo-50 rounded-lg text-indigo-600"><PlayCircle className="w-5 h-5" /></div>
+                                <div className="p-2 bg-gold-500/10 rounded-lg text-gold-600"><PlayCircle className="w-5 h-5" /></div>
                                 <div>
-                                    <h3 className="text-sm font-bold text-slate-900">Session précédente détectée</h3>
-                                    <p className="text-xs text-slate-500 mt-0.5">Reprendre là où vous vous êtes arrêté ?</p>
+                                    <h3 className="text-sm font-bold text-earth-900">Session précédente détectée</h3>
+                                    <p className="text-xs text-earth-500 mt-0.5">Reprendre là où vous vous êtes arrêté ?</p>
                                 </div>
                             </div>
                             <div className="flex items-center gap-3 w-full sm:w-auto">
@@ -638,11 +673,11 @@ const AppContent: React.FC = () => {
                     )}
 
                     <div className="text-center mb-12 animate-scale-in">
-                    <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full border border-indigo-100 bg-indigo-50 text-indigo-700 text-[11px] font-bold uppercase tracking-wider mb-4 shadow-sm">
+                    <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full border border-gold-500/20 bg-gold-500/10 text-gold-600 text-[11px] font-bold uppercase tracking-wider mb-4 shadow-sm">
                         <Sparkles className="w-3 h-3 animate-float" />
                         Vérification Instantanée
                     </div>
-                    <h2 className="text-4xl sm:text-5xl font-bold text-slate-900 mb-4 tracking-tight">
+                    <h2 className="text-4xl sm:text-5xl font-bold text-earth-900 mb-4 tracking-tight">
                         Statut d'entreprise
                     </h2>
                     </div>
@@ -670,15 +705,15 @@ const AppContent: React.FC = () => {
 
                         <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-6 px-2 mb-4 animate-fade-in">
                         <div className="flex items-center gap-3">
-                            <h3 className="text-lg font-semibold text-slate-800 flex items-center gap-3">
-                            <span className="flex items-center justify-center w-7 h-7 bg-slate-900 text-white rounded-full text-xs font-bold shadow-md">{filteredData.length}</span>
+                            <h3 className="text-lg font-semibold text-earth-900 flex items-center gap-3">
+                            <span className="flex items-center justify-center w-7 h-7 bg-earth-900 text-white rounded-full text-xs font-bold shadow-md">{filteredData.length}</span>
                             Résultats {activeProjectId ? '(Sauvegardé)' : '(Temp)'}
                             </h3>
                             {activeProjectId && (
                                 <div className="flex items-center gap-2">
                                     {!dirHandle ? (
                                         hasStoredHandle ? (
-                                            <Button onClick={restoreFolderConnection} variant="secondary" size="xs" leftIcon={<RotateCw className="w-3 h-3" />} className="text-indigo-600 bg-indigo-50 border-indigo-200 hover:bg-indigo-100 animate-pulse">
+                                            <Button onClick={restoreFolderConnection} variant="secondary" size="xs" leftIcon={<RotateCw className="w-3 h-3" />} className="text-gold-600 bg-gold-500/10 border-gold-500/30 hover:bg-gold-500/20 animate-pulse">
                                                 <span className="hidden sm:inline">Reconnecter Dossier</span>
                                             </Button>
                                         ) : (
@@ -695,17 +730,17 @@ const AppContent: React.FC = () => {
                                     )}
                                 </div>
                             )}
-                            <Button onClick={handleClearResults} variant="ghost" size="icon" className="text-slate-400 hover:text-rose-500 hover:bg-rose-50" title="Fermer la vue" aria-label="Fermer les résultats"><X className="w-4 h-4" /></Button>
+                            <Button onClick={handleClearResults} variant="ghost" size="icon" className="text-earth-500 hover:text-rose-500 hover:bg-rose-50" title="Fermer la vue" aria-label="Fermer les résultats"><X className="w-4 h-4" /></Button>
                         </div>
                         
-                        <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center bg-white p-2 rounded-xl border border-slate-200 shadow-sm w-full xl:w-auto">
+                        <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center bg-white p-2 rounded-xl border border-beige-300 shadow-sm w-full xl:w-auto">
                             <Button onClick={() => setShowColumnModal(true)} variant="ghost" size="sm" leftIcon={<TableProperties className="w-3.5 h-3.5" />}>
                                 <span className="hidden sm:inline">Colonnes</span>
                             </Button>
 
-                            <div className="w-px h-6 bg-slate-200 hidden sm:block mx-1"></div>
+                            <div className="w-px h-6 bg-beige-200 hidden sm:block mx-1"></div>
 
-                            <div className="flex items-center gap-2 px-3 text-xs font-medium text-slate-500 border-r border-slate-100 pr-4 mr-1 hidden sm:flex"><Filter className="w-3.5 h-3.5" /><span>Filtres :</span></div>
+                            <div className="flex items-center gap-2 px-3 text-xs font-medium text-earth-500 border-r border-beige-200 pr-4 mr-1 hidden sm:flex"><Filter className="w-3.5 h-3.5" /><span>Filtres :</span></div>
                             <div className="flex flex-wrap gap-2">
                                 <Button 
                                     onClick={() => setExportFilters(prev => ({ ...prev, excludeClosed: !prev.excludeClosed }))} 
@@ -727,7 +762,7 @@ const AppContent: React.FC = () => {
                                 <Button 
                                     onClick={() => setExportFilters(prev => ({ ...prev, onlyWithEmail: !prev.onlyWithEmail }))} 
                                     variant={exportFilters.onlyWithEmail ? "primary" : "secondary"}
-                                    className={exportFilters.onlyWithEmail ? "bg-indigo-50 text-indigo-600 border-indigo-200 shadow-none hover:bg-indigo-100" : ""}
+                                    className={exportFilters.onlyWithEmail ? "bg-gold-500/10 text-gold-600 border-gold-500/30 shadow-none hover:bg-gold-500/20" : ""}
                                     size="xs"
                                     leftIcon={exportFilters.onlyWithEmail ? <Check className="w-3 h-3" /> : undefined}
                                 >
@@ -746,8 +781,8 @@ const AppContent: React.FC = () => {
                             <ResultTable data={filteredData} onUpdate={handleUpdateResult} columnLabels={columnLabels} />
                         </Suspense>
 
-                        <div className="mt-8 p-4 rounded-xl bg-white border border-slate-200 text-xs text-slate-500 flex items-start gap-3 max-w-2xl mx-auto shadow-sm animate-fade-in">
-                        <Info className="w-4 h-4 mt-0.5 shrink-0 text-indigo-500" />
+                        <div className="mt-8 p-4 rounded-xl bg-white border border-beige-300 text-xs text-earth-500 flex items-start gap-3 max-w-2xl mx-auto shadow-sm animate-fade-in">
+                        <Info className="w-4 h-4 mt-0.5 shrink-0 text-gold-500" />
                         <div className="space-y-1">
                             <p>Les données sont enregistrées automatiquement en local. Aucune donnée ne transite vers nos serveurs.</p>
                         </div>

@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState } from 'react';
 import { Mail, TrendingUp, TrendingDown, AlertTriangle } from 'lucide-react';
 
@@ -67,7 +66,7 @@ const StatCard: React.FC<StatCardProps> = ({ label, value, icon, trendText, colo
     };
 
     return (
-        <div className="card-hover bg-white rounded-xl p-5 border border-slate-200 shadow-sm text-center">
+        <div className="card-hover bg-white rounded-xl p-5 border border-beige-300 shadow-sm text-center">
             <div className={`stat-counter ${colors[color]}`} key={value}>
                 {animatedValue}
             </div>

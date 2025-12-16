@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { Loader2, Check, X, Minus } from 'lucide-react';
 
@@ -25,10 +24,10 @@ const DOT_CLASSES: Record<TimelineStatus, string> = {
 };
 
 const TEXT_CLASSES: Record<TimelineStatus, { title: string; desc: string }> = {
-    completed: { title: 'text-slate-800', desc: 'text-slate-500' },
-    active: { title: 'text-slate-800 font-bold', desc: 'text-indigo-500' },
+    completed: { title: 'text-earth-900', desc: 'text-earth-500' },
+    active: { title: 'text-earth-900 font-bold', desc: 'text-gold-500' },
     failed: { title: 'text-rose-600 font-semibold', desc: 'text-rose-500' },
-    pending: { title: 'text-slate-400', desc: 'text-slate-400' },
+    pending: { title: 'text-earth-500', desc: 'text-earth-500' },
 };
 
 const Timeline: React.FC<{ steps: TimelineStep[] }> = ({ steps }) => {
