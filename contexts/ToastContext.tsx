@@ -1,7 +1,7 @@
 
 // FIX: Import `useEffect` from `react` to fix 'Cannot find name' error.
 import React, { createContext, useContext, useState, useCallback, ReactNode, useEffect } from 'react';
-import { Check, AlertTriangle, X } from 'lucide-react';
+import { Check, AlertTriangle, X, Info } from 'lucide-react';
 import { ToastMessage, ToastType } from '../types';
 
 type ToastContextType = {
@@ -33,31 +33,31 @@ const Toast: React.FC<{ toast: ToastMessage; onRemove: (id: string) => void }> =
   const ICONS: Record<ToastType, React.ReactElement> = {
     success: <Check className="w-6 h-6 text-white" />,
     error: <AlertTriangle className="w-6 h-6 text-white" />,
-    info: <Check className="w-6 h-6 text-white" /> // Using Check for info for now
+    info: <Info className="w-6 h-6 text-white" />
   };
 
   const BORDER_COLORS: Record<ToastType, string> = {
     success: 'border-emerald-500',
     error: 'border-rose-500',
-    info: 'border-sky-500'
+    info: 'border-yellow-500'
   };
   
   const ICON_BG_COLORS: Record<ToastType, string> = {
     success: 'bg-emerald-500',
     error: 'bg-rose-500',
-    info: 'bg-sky-500'
+    info: 'bg-yellow-500'
   };
 
   const PROGRESS_BG_COLORS: Record<ToastType, string> = {
     success: 'bg-emerald-500',
     error: 'bg-rose-500',
-    info: 'bg-sky-500'
+    info: 'bg-yellow-500'
   }
 
   const isError = toast.type === 'error';
 
   return (
-    <div className={`toast-slide-in glass-indigo rounded-xl p-4 shadow-elegant max-w-sm w-full border-l-4 ${BORDER_COLORS[toast.type]}`}>
+    <div className={`toast-slide-in glass rounded-xl p-4 shadow-elegant max-w-sm w-full border-l-4 ${BORDER_COLORS[toast.type]}`}>
       <div className="flex items-start gap-3">
         <div className={isError ? 'animate-shake' : 'animate-bounce'}>
           <div className={`w-10 h-10 ${ICON_BG_COLORS[toast.type]} rounded-full flex items-center justify-center`}>
@@ -67,11 +67,11 @@ const Toast: React.FC<{ toast: ToastMessage; onRemove: (id: string) => void }> =
         
         <div className="flex-1 pt-1">
           <h4 
-            className="font-bold text-slate-800 mb-0.5"
+            className="font-bold text-[#403E37] mb-0.5"
           >
             {toast.title}
           </h4>
-          <p className="text-sm text-slate-600">{toast.message}</p>
+          <p className="text-sm text-[#8B865F]">{toast.message}</p>
         </div>
         
         <button onClick={() => onRemove(toast.id)} className="text-slate-400 hover:text-slate-600 transition hover-rotate shrink-0">

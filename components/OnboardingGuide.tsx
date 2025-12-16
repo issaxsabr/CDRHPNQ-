@@ -161,7 +161,7 @@ const OnboardingGuide: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ i
 
   return (
     <>
-      <div className="fixed inset-0 bg-slate-900/60 z-[1000]" onClick={isModalStep ? undefined : handleClose} />
+      <div className="fixed inset-0 bg-[#403E37]/60 z-[1000]" onClick={isModalStep ? undefined : handleClose} />
       
       <div 
         className="fixed z-[1100] w-80 bg-white rounded-xl shadow-2xl p-5 transition-all duration-300 animate-fade-in-up" 
@@ -169,14 +169,14 @@ const OnboardingGuide: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ i
       >
         <div className="flex justify-between items-start mb-3">
           <div className="flex items-center gap-2">
-            <div className={`w-8 h-8 rounded-full flex items-center justify-center ${isLastStep ? 'bg-emerald-100 text-emerald-600' : 'bg-indigo-100 text-indigo-600'}`}>
+            <div className={`w-8 h-8 rounded-full flex items-center justify-center ${isLastStep ? 'bg-emerald-100 text-emerald-600' : 'bg-yellow-100 text-yellow-600'}`}>
               {isLastStep ? <PartyPopper className="w-5 h-5" /> : <Zap className="w-5 h-5" />}
             </div>
-            <h3 className="font-bold text-slate-800">{step.title}</h3>
+            <h3 className="font-bold text-[#403E37]">{step.title}</h3>
           </div>
           <button onClick={handleClose} className="text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
         </div>
-        <p className="text-sm text-slate-600 mb-5">{step.content}</p>
+        <p className="text-sm text-[#8B865F] mb-5">{step.content}</p>
 
         <div className="flex items-center justify-between">
           <span className="text-xs font-mono text-slate-400">{currentStep + 1} / {STEPS.length}</span>
@@ -186,7 +186,7 @@ const OnboardingGuide: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ i
                 <ArrowLeft className="w-4 h-4" />
               </button>
             )}
-            <button onClick={handleNext} className="px-4 py-2 text-sm font-semibold text-white bg-indigo-600 rounded-lg btn-modern flex items-center gap-2">
+            <button onClick={handleNext} className="px-4 py-2 text-sm font-semibold text-white bg-black rounded-lg btn-modern flex items-center gap-2">
               {isLastStep ? 'Terminer' : 'Suivant'}
               {!isLastStep && <ArrowRight className="w-4 h-4" />}
             </button>

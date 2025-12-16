@@ -16,7 +16,7 @@ interface SerperOptions {
     enableSocialsSearch?: boolean;
 }
 
-const doFetch = async (endpoint: string, query: string, country: string) => {
+const doFetch = async (endpoint: string, query: string, serperKey: string, country: string) => {
     let locationString: string | undefined;
     switch (country) {
         case 'qc': locationString = "Quebec, Canada"; break;
@@ -34,9 +34,16 @@ const doFetch = async (endpoint: string, query: string, country: string) => {
         case 'nu': locationString = "Nunavut, Canada"; break;
         default: locationString = "Canada";
     }
+
+    // NOUVELLE LOGIQUE : Rendre la requête explicite
+    const lowerQuery = query.toLowerCase();
+    const locationParts = locationString.toLowerCase().split(',').map(p => p.trim());
+    const locationAlreadyInQuery = locationParts.some(part => lowerQuery.includes(part));
+    
+    const explicitQuery = locationAlreadyInQuery ? query : `${query}, ${locationString}`;
   
     const requestBody = {
-        "q": query,
+        "q": explicitQuery,
         "gl": "ca",
         "hl": "fr",
         "location": endpoint === 'maps' ? locationString : undefined
@@ -47,12 +54,17 @@ const doFetch = async (endpoint: string, query: string, country: string) => {
             service: 'serper',
             payload: {
                 endpoint: endpoint,
-                body: requestBody
+                body: requestBody,
+                apiKey: serperKey
             }
         }
     });
 
     if (error) {
+        // Gérer le cas où la clé API est invalide
+        if (error.message && error.message.includes('403')) {
+             throw new Error("Clé API Serper invalide ou expirée. Veuillez la vérifier dans les paramètres.");
+        }
         throw new Error(`Proxy Supabase Error: ${error.message}`);
     }
 
@@ -65,12 +77,12 @@ const doFetch = async (endpoint: string, query: string, country: string) => {
 
 export const searchWithSerper = async (
     query: string, 
-    _apiKey: string, 
+    apiKey: string, 
     country: string = 'qc', 
     strategy: SerperStrategy = 'maps_basic',
     options: SerperOptions = {}
 ): Promise<SerperOptimizedResult> => {
-  const { enableDecisionMakerSearch = false, enableSocialsSearch = true } = options;
+  const { enableDecisionMakerSearch = false, enableSocialsSearch = false } = options;
 
   let placesResult: any = null;
   let organicResult: any = null;
@@ -79,27 +91,38 @@ export const searchWithSerper = async (
   let searchQuality: 'GOOD' | 'FALLBACK' | 'EMPTY' = 'EMPTY';
 
   const useMaps = strategy.startsWith('maps');
-  const enrichWithWeb = strategy === 'maps_web_enrich';
-
-  const mainQuery = `${query} (adresse OR téléphone OR contact) -jobs -careers -indeed`;
+  const enrichWithWeb = strategy === 'maps_web_enrich' || strategy === 'maps_web_leadgen';
+  const mainQueryFallback = `${query} (adresse OR téléphone OR contact OR email OR courriel) -jobs -careers -indeed`;
   
   if (useMaps) {
-      placesResult = await doFetch("maps", query, country);
+      placesResult = await doFetch("maps", query, apiKey, country);
+      
       if (enrichWithWeb) {
-          organicResult = await doFetch("search", mainQuery, country);
+          const website = placesResult?.places?.[0]?.website;
+          let webSearchQuery = mainQueryFallback;
+
+          if (website) {
+              try {
+                  const domain = new URL(website).hostname.replace('www.', '');
+                  // Logique optimisée inspirée par votre suggestion
+                  webSearchQuery = `site:${domain} ("email" OR "contact" OR "courriel" OR "@${domain}") OR ("${query}" "contact")`;
+              } catch (e) {
+                  console.warn("URL de site web invalide, utilisation de la requête de secours.", website);
+              }
+          }
+          organicResult = await doFetch("search", webSearchQuery, apiKey, country);
       }
   } else {
-      organicResult = await doFetch("search", mainQuery, country);
+      organicResult = await doFetch("search", mainQueryFallback, apiKey, country);
   }
 
   const hasPlace = placesResult?.places && placesResult.places.length > 0;
-  if (useMaps && !hasPlace && !enrichWithWeb) {
-      organicResult = await doFetch("search", mainQuery, country);
-      searchQuality = 'FALLBACK';
-  } else if (hasPlace || (organicResult?.organic && organicResult.organic.length > 0)) {
+  const hasOrganic = organicResult?.organic && organicResult.organic.length > 0;
+
+  if (hasPlace || hasOrganic) {
       searchQuality = 'GOOD';
   }
-
+  
   if (enableDecisionMakerSearch) {
       const companyDomain = organicResult?.organic?.[0]?.link ? new URL(organicResult.organic[0].link).hostname.replace('www.','') : null;
       const dmQueries = [
@@ -108,14 +131,14 @@ export const searchWithSerper = async (
           `site:linkedin.com/in "at ${query}" (CEO OR Fondateur OR Directeur)`
       ].filter(Boolean) as string[];
 
-      const dmPromises = dmQueries.map(q => doFetch("search", q, country).catch(e => { console.warn(`DM search failed for query: ${q}`, e); return { organic: [] }; }));
+      const dmPromises = dmQueries.map(q => doFetch("search", q, apiKey, country).catch(e => { console.warn(`DM search failed for query: ${q}`, e); return { organic: [] }; }));
       const dmResults = await Promise.all(dmPromises);
       decisionMakersContext = dmResults.flatMap(res => res.organic || []);
   }
   
   if (enableSocialsSearch) {
       const socialQuery = `"${query}" (site:linkedin.com/company OR site:facebook.com OR site:instagram.com)`;
-      const socialResult = await doFetch("search", socialQuery, country).catch(e => { console.warn('Social search failed', e); return { organic: [] }; });
+      const socialResult = await doFetch("search", socialQuery, apiKey, country).catch(e => { console.warn('Social search failed', e); return { organic: [] }; });
       socialsContext = socialResult.organic || [];
   }
 

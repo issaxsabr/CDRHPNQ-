@@ -1,6 +1,6 @@
 
 import { BusinessData, ColumnLabelMap } from '../types';
-import { utils, write, writeFile } from 'xlsx';
+import ExcelJS from 'exceljs';
 
 /**
  * Génère le contenu HTML de la mini-app interactive
@@ -9,6 +9,8 @@ export const getInteractiveHTMLContent = (data: BusinessData[], projectName: str
     const jsonString = JSON.stringify(data).replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '\\"');
     const labelsString = JSON.stringify(columnLabels).replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '\\"');
 
+    // NOTE: On conserve le script CDN de xlsx ici car il est utilisé dans un fichier autonome
+    // et ne pose pas de risque de sécurité pour l'application principale.
     return `
 <!DOCTYPE html>
 <html lang="fr">
@@ -186,9 +188,40 @@ export const getInteractiveHTMLContent = (data: BusinessData[], projectName: str
 };
 
 /**
- * Crée un Workbook Excel (SheetJS)
+ * Crée un Workbook Excel (ExcelJS)
  */
-export const createExcelWorkbook = (data: BusinessData[], columnLabels: ColumnLabelMap) => {
+export async function createExcelWorkbook(data: BusinessData[], columnLabels: ColumnLabelMap): Promise<ArrayBuffer> {
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet('Leads');
+
+    // Définir les colonnes, leurs en-têtes, leurs clés et leurs largeurs
+    worksheet.columns = [
+        { header: "Terme Recherché", key: "searchedTerm", width: 25 },
+        { header: columnLabels.name, key: "name", width: 35 },
+        { header: columnLabels.customField, key: "customField", width: 20 },
+        { header: columnLabels.status, key: "status", width: 15 },
+        { header: "Décideur (Nom)", key: "decisionMakerName", width: 20 },
+        { header: "Poste (Contact)", key: "decisionMakerTitle", width: 25 },
+        { header: "Email 1", key: "email1", width: 30 },
+        { header: "Email 2", key: "email2", width: 30 },
+        { header: "Email 3", key: "email3", width: 20 },
+        { header: "Téléphone 1", key: "phone1", width: 15 },
+        { header: "Téléphone 2", key: "phone2", width: 15 },
+        { header: "Téléphone 3", key: "phone3", width: 15 },
+        { header: "Site Web", key: "website", width: 30 },
+        { header: "Facebook", key: "facebook", width: 20 },
+        { header: "LinkedIn", key: "linkedin", width: 20 },
+        { header: "Instagram", key: "instagram", width: 20 },
+        { header: columnLabels.category, key: "category", width: 20 },
+        { header: columnLabels.address, key: "address", width: 40 },
+        { header: columnLabels.hours, key: "hours", width: 30 },
+        { header: "Lien Maps", key: "sourceUri", width: 30 }
+    ];
+
+    // Mettre en gras la ligne d'en-tête
+    worksheet.getRow(1).font = { bold: true };
+
+    // Préparer et ajouter les lignes de données
     const rows = data.map(row => {
         const uniquePhones = Array.from(new Set(row.phones || (row.phone ? [row.phone] : [])));
         const uniqueEmails = Array.from(new Set(row.emails || (row.email ? [row.email] : [])));
@@ -197,56 +230,54 @@ export const createExcelWorkbook = (data: BusinessData[], columnLabels: ColumnLa
         const primaryEmail = uniqueEmails[0];
         const primaryContact = row.decisionMakers?.find(p => p.email && primaryEmail && p.email.toLowerCase() === primaryEmail.toLowerCase());
 
-        const rowData: any = {};
-        rowData["Terme Recherché"] = row.searchedTerm || "";
-        rowData[columnLabels.name] = row.name;
-        rowData[columnLabels.customField] = row.customField || ""; 
-        rowData[columnLabels.status] = row.status;
-        
-        rowData["Décideur (Nom)"] = dm?.name || "";
-        rowData["Poste (Contact)"] = primaryContact?.title || ""; 
-
-        rowData["Email 1"] = uniqueEmails[0] || "";
-        rowData["Email 2"] = uniqueEmails[1] || "";
-        rowData["Email 3"] = uniqueEmails[2] || "";
-        rowData["Téléphone 1"] = uniquePhones[0] || "";
-        rowData["Téléphone 2"] = uniquePhones[1] || "";
-        rowData["Téléphone 3"] = uniquePhones[2] || "";
-        rowData["Site Web"] = row.website || "";
-        rowData["Facebook"] = row.socials?.facebook || "";
-        rowData["LinkedIn"] = row.socials?.linkedin || "";
-        rowData["Instagram"] = row.socials?.instagram || "";
-        rowData[columnLabels.category] = row.category || "";
-        rowData[columnLabels.address] = row.address || "";
-        rowData[columnLabels.hours] = row.hours || "";
-        rowData["Lien Maps"] = row.sourceUri || "";
-        
-        return rowData;
+        return {
+            searchedTerm: row.searchedTerm || "",
+            name: row.name,
+            customField: row.customField || "",
+            status: row.status,
+            decisionMakerName: dm?.name || "",
+            decisionMakerTitle: primaryContact?.title || "",
+            email1: uniqueEmails[0] || "",
+            email2: uniqueEmails[1] || "",
+            email3: uniqueEmails[2] || "",
+            phone1: uniquePhones[0] || "",
+            phone2: uniquePhones[1] || "",
+            phone3: uniquePhones[2] || "",
+            website: row.website || "",
+            facebook: row.socials?.facebook || "",
+            linkedin: row.socials?.linkedin || "",
+            instagram: row.socials?.instagram || "",
+            category: row.category || "",
+            address: row.address || "",
+            hours: row.hours || "",
+            sourceUri: row.sourceUri || ""
+        };
     });
 
-    const ws = utils.json_to_sheet(rows);
-    const wscols = [
-        { wch: 25 }, { wch: 35 }, { wch: 20 }, { wch: 15 }, 
-        { wch: 20 }, { wch: 25 }, { wch: 30 }, { wch: 30 }, { wch: 20 },
-        { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 30 }, { wch: 20 }, { wch: 20 }, { wch: 20 },
-        { wch: 20 }, { wch: 40 }, { wch: 30 }, { wch: 30 }
-    ];
-    ws['!cols'] = wscols;
-    ws['!views'] = [{ state: 'frozen', ySplit: 1 }];
-    if (rows.length > 0) {
-        const range = utils.decode_range(ws['!ref'] || "A1:A1");
-        ws['!autofilter'] = { ref: utils.encode_range({ r: 0, c: 0 }, { r: 0, c: range.e.c }) };
-    }
+    worksheet.addRows(rows);
 
-    const wb = utils.book_new();
-    utils.book_append_sheet(wb, ws, "Leads");
-    return wb;
+    // Figer la première ligne
+    worksheet.views = [{ state: 'frozen', ySplit: 1 }];
+    
+    // Activer l'auto-filtre
+    worksheet.autoFilter = {
+      from: 'A1',
+      to: { row: 1, column: worksheet.columns.length }
+    };
+
+    // Retourner le buffer du fichier
+    return await workbook.xlsx.writeBuffer();
 }
 
 /**
  * Télécharge un fichier Excel
  */
-export const exportToExcel = (data: BusinessData[], filename: string, columnLabels: ColumnLabelMap) => {
-    const wb = createExcelWorkbook(data, columnLabels);
-    writeFile(wb, `${filename}.xlsx`);
+export async function exportToExcel(data: BusinessData[], filename: string, columnLabels: ColumnLabelMap) {
+    const buffer = await createExcelWorkbook(data, columnLabels);
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `${filename}.xlsx`;
+    link.click();
+    URL.revokeObjectURL(link.href);
 };

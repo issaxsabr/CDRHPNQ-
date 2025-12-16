@@ -2,6 +2,8 @@
 
 
 
+
+
 export interface ContactPerson {
   name: string;
   title?: string; // CEO, Fondateur, Directeur, Gérant...
@@ -68,7 +70,7 @@ export interface Project {
 }
 
 export type ScraperProvider = 'serper_eco'; // Simplification : On garde uniquement le mode performant
-export type SerperStrategy = 'maps_basic' | 'web_basic' | 'maps_web_enrich';
+export type SerperStrategy = 'maps_basic' | 'web_basic' | 'maps_web_enrich' | 'maps_web_leadgen';
 
 // Provinces Canadiennes
 export type CountryCode = 'qc' | 'on' | 'bc' | 'ab' | 'mb' | 'sk' | 'ns' | 'nb' | 'nl' | 'pe' | 'yt' | 'nt' | 'nu';

@@ -47,7 +47,7 @@ interface StatCardProps {
     value: number;
     icon: React.ReactNode;
     trendText: string;
-    color: 'emerald' | 'rose' | 'amber' | 'indigo';
+    color: 'emerald' | 'rose' | 'amber' | 'gold';
 }
 
 const StatCard: React.FC<StatCardProps> = ({ label, value, icon, trendText, color }) => {
@@ -57,13 +57,13 @@ const StatCard: React.FC<StatCardProps> = ({ label, value, icon, trendText, colo
         emerald: 'text-emerald-600',
         rose: 'text-rose-600',
         amber: 'text-amber-600',
-        indigo: 'text-indigo-600',
+        gold: 'text-yellow-600',
     };
     const trendColors = {
         emerald: 'stat-trend up',
         rose: 'stat-trend down',
         amber: 'stat-trend',
-        indigo: 'stat-trend',
+        gold: 'stat-trend',
     };
 
     return (
@@ -110,7 +110,7 @@ const DashboardStats: React.FC<DashboardStatsProps> = ({ stats }) => {
                 value={stats.emails}
                 icon={<Mail className="w-3.5 h-3.5" />}
                 trendText="Contacts potentiels"
-                color="indigo"
+                color="gold"
             />
         </div>
     );

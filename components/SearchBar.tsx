@@ -1,6 +1,6 @@
 
 import React, { useState, useRef } from 'react';
-import { Search, MapPin, Loader2, Database, Zap, Settings, Globe, ChevronDown, Sparkles, FileText, Eraser, DollarSign, Map, Search as SearchIcon, Folder, FolderPlus, Info, UploadCloud, PieChart, Command, X, Check, FolderOpen, Server, ShieldCheck } from 'lucide-react';
+import { Search, MapPin, Loader2, Database, Zap, Settings, Globe, ChevronDown, Sparkles, FileText, Eraser, DollarSign, Map, Search as SearchIcon, Folder, FolderPlus, Info, UploadCloud, PieChart, Command, X, Check, FolderOpen, Server, ShieldCheck, UserSearch } from 'lucide-react';
 import { ScraperProvider, CountryCode, SerperStrategy, Project } from '../types';
 
 interface SearchBarProps {
@@ -151,9 +151,9 @@ const SearchBar: React.FC<SearchBarProps> = ({
 
   // Configuration des stratégies pour l'affichage
   const strategies = [
-    { id: 'web_basic', name: 'Web (Éco)', cost: 1, icon: SearchIcon, desc: 'Recherche Simple' },
-    { id: 'maps_basic', name: 'Maps (Std)', cost: 3, icon: Map, desc: 'Recherche Approfondi' },
-    { id: 'maps_web_enrich', name: 'Maps + Web', cost: 4, icon: Sparkles, desc: 'Recherche Complete' },
+    { id: 'maps_basic', name: 'Maps (Std)', cost: 3, icon: Map, desc: 'Recherche Google Maps' },
+    { id: 'maps_web_enrich', name: 'Maps + Web', cost: 4, icon: Sparkles, desc: 'Enrichi avec le Web' },
+    { id: 'maps_web_leadgen', name: 'Lead Gen', cost: 8, icon: UserSearch, desc: 'Analyse + Décideurs' },
   ];
 
   const currentStrategy = strategies.find(s => s.id === strategy) || strategies[1];

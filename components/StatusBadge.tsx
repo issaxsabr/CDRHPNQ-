@@ -31,8 +31,8 @@ const StatusBadge: React.FC<StatusBadgeProps> = ({ status }) => {
         );
     }
     
-    // Orange - Warning / Needs check
-    if (s.includes('ferm') || s.includes('doublon') || s.includes('ignoré') || s.includes('erreur')) {
+    // Gold/Amber - Warning / Needs check
+    if (s.includes('doublon') || s.includes('ignoré') || s.includes('erreur') || s.includes('ferm')) {
         let text = 'À VÉRIFIER';
         if(s.includes('doublon')) text = 'DOUBLON';
         else if (s.includes('ignoré')) text = 'IGNORÉ';
@@ -45,7 +45,7 @@ const StatusBadge: React.FC<StatusBadgeProps> = ({ status }) => {
         );
     }
 
-    // Blue - Default / Fallback for any other status
+    // Gold - Default / Fallback for any other status
     return (
         <span className="status-checking" title={status}>
             <span className="relative z-10">

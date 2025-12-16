@@ -14,7 +14,7 @@ import { extractDataFromContext, enrichWithGemini } from './services/gemini';
 import { searchWithSerper } from './services/serper';
 import { cacheService, projectService, blacklistService } from './services/storage';
 import { BusinessData, ScraperState, ScraperProvider, CountryCode, SavedSession, SerperStrategy, Project, ColumnLabelMap } from './types';
-import { getInteractiveHTMLContent, createExcelWorkbook, exportToExcel } from './utils/exportUtils';
+import { getInteractiveHTMLContent, exportToExcel } from './utils/exportUtils';
 import { validateAndSanitize } from './utils/validation';
 import { z } from 'zod';
 import { CONFIG } from './config';
@@ -212,7 +212,7 @@ const AppContent: React.FC = () => {
         const fileName = `export_${project.name.replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 10)}`;
 
         if (type === 'xlsx') {
-            exportToExcel(data, fileName, columnLabels);
+            await exportToExcel(data, fileName, columnLabels);
         } else if (type === 'html') {
             generateInteractiveHTML(data, project.name);
         } else {
@@ -346,7 +346,11 @@ const AppContent: React.FC = () => {
   }, [activeProjectId, addToast, state.results]);
 
   const processSingleQuery = async (query: string, provider: ScraperProvider, serperKey: string, country: string, strategy: SerperStrategy): Promise<{ businesses: BusinessData[], rawText: string, qualityScore?: number }> => {
-      const serperData = await searchWithSerper(query, serperKey, country, strategy, { enableDecisionMakerSearch: strategy === 'maps_web_enrich' });
+      const isLeadGen = strategy === 'maps_web_leadgen';
+      const serperData = await searchWithSerper(query, serperKey, country, strategy, {
+          enableDecisionMakerSearch: isLeadGen,
+          enableSocialsSearch: isLeadGen
+      });
       const geminiEnrichmentData = await enrichWithGemini(serperData, query);
       return await extractDataFromContext(query, serperData, geminiEnrichmentData);
   };
@@ -549,10 +553,10 @@ const AppContent: React.FC = () => {
     return dataToExport;
   }, [state.results, exportFilters]);
 
-  const downloadExcel = useCallback(() => {
+  const downloadExcel = useCallback(async () => {
     if (filteredData.length === 0) { addToast({type: 'info', title: 'Exportation Vide', message: 'Aucune donnée à exporter selon les filtres actuels.'}); return; }
     const fileName = `lead_harvest_${activeProjectId ? projects.find(p => p.id === activeProjectId)?.name : 'temp'}_${new Date().toISOString().slice(0, 10)}`;
-    exportToExcel(filteredData, fileName, columnLabels);
+    await exportToExcel(filteredData, fileName, columnLabels);
     addToast({type: 'success', title: 'Exportation Réussie', message: `${filteredData.length} lignes exportées en Excel.`});
   }, [filteredData, activeProjectId, projects, columnLabels, addToast]);
   
